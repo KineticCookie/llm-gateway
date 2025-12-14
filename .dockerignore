@@ -1,0 +1,11 @@
+target/
+.git/
+.gitignore
+*.md
+logs/
+observability/
+docker-compose.yml
+.dockerignore
+Dockerfile
+config.yaml
+*.log

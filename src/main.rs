@@ -13,7 +13,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::config::ProxyConfig;
 use crate::handlers::{chat_completions, health_check, metrics_handler, AppState};
-use crate::queue::PriorityQueue;
+use crate::queue::ClassBasedScheduler;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -21,57 +21,44 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "openai_api_proxy=debug,tower_http=debug".into()),
+                .unwrap_or_else(|_| "llm_gateway=debug,tower_http=debug".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
     // Load configuration
-    let config = ProxyConfig::from_file("config.yaml")
-        .or_else(|_| ProxyConfig::from_env())
-        .unwrap_or_else(|e| {
-            tracing::warn!("Failed to load config: {}. Using defaults.", e);
-            ProxyConfig {
-                server: config::ServerConfig {
-                    host: "0.0.0.0".to_string(),
-                    port: 8080,
-                },
-                upstream: config::UpstreamConfig {
-                    openai_api_url: "https://api.openai.com".to_string(),
-                    api_key: None,
-                },
-                queue: config::QueueConfig {
-                    max_queue_size: 100,
-                    timeout_seconds: 300,
-                    concurrent_limit: 10,
-                },
-            }
-        });
+    let config = ProxyConfig::from_file("config.yaml").or_else(|_| ProxyConfig::from_env())?;
 
-    tracing::info!("Configuration loaded: {:?}", config);
+    tracing::info!("Configuration loaded successfully");
+    tracing::info!("Server: {}:{}", config.server.host, config.server.port);
+    tracing::info!(
+        "Global concurrency: {}",
+        config.scheduler.global_concurrency
+    );
 
-    // Create priority queue
-    let queue = Arc::new(PriorityQueue::new(
-        config.queue.max_queue_size,
-        config.queue.concurrent_limit,
-    ));
+    // Create class-based scheduler
+    let scheduler = Arc::new(ClassBasedScheduler::new(&config.scheduler)?);
 
-    // Spawn queue processor tasks
-    let queue_clone = queue.clone();
+    // Log credential class mappings
+    if let Some(default_class) = &config.credentials.default_class {
+        tracing::info!("Default class for unknown credentials: {}", default_class);
+    } else {
+        tracing::info!("Default class for unknown credentials: disabled (403 Forbidden)");
+    }
+
+    if let Some(fallback_class) = &config.credentials.fallback_class {
+        tracing::info!(
+            "Fallback class for misconfigured mappings: {}",
+            fallback_class
+        );
+    } else {
+        tracing::info!("Fallback class for misconfigured mappings: disabled (403 Forbidden)");
+    }
+
+    // Spawn dispatch loop
+    let scheduler_clone = scheduler.clone();
     tokio::spawn(async move {
-        loop {
-            queue_clone.process_next().await;
-            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        }
-    });
-
-    // Spawn periodic queue distribution updater
-    let queue_clone = queue.clone();
-    tokio::spawn(async move {
-        loop {
-            queue_clone.update_queue_distribution().await;
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-        }
+        scheduler_clone.dispatch_loop().await;
     });
 
     // Create HTTP client
@@ -80,13 +67,14 @@ async fn main() -> anyhow::Result<()> {
     // Create application state
     let state = AppState {
         config: Arc::new(config.clone()),
-        queue,
+        scheduler,
         http_client,
     };
 
     // Build router
     let app = Router::new()
         .route("/health", get(health_check))
+        .route("/status", get(handlers::status))
         .route("/metrics", get(metrics_handler))
         .route("/v1/chat/completions", post(chat_completions))
         // Add other OpenAI endpoints as pass-through if needed
@@ -97,10 +85,12 @@ async fn main() -> anyhow::Result<()> {
     // Start server
     let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    
-    tracing::info!("OpenAI API Proxy listening on {}", addr);
-    tracing::info!("Queue configuration: max_size={}, concurrent_limit={}", 
-        config.queue.max_queue_size, config.queue.concurrent_limit);
+
+    tracing::info!("Listening on {}", addr);
+    tracing::info!(
+        "Class-based scheduling active with {} traffic classes",
+        config.scheduler.classes.len()
+    );
 
     axum::serve(listener, app).await?;
 

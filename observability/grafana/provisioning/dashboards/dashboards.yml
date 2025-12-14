@@ -1,9 +1,9 @@
 apiVersion: 1
 
 providers:
-  - name: 'OpenAI Proxy Dashboards'
+  - name: 'LLM Gateway Dashboards'
     orgId: 1
-    folder: 'OpenAI Proxy'
+    folder: 'LLM Gateway'
     type: file
     disableDeletion: false
     updateIntervalSeconds: 10

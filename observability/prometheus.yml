@@ -2,7 +2,7 @@ global:
   scrape_interval: 5s
   evaluation_interval: 5s
   external_labels:
-    cluster: 'openai-proxy'
+    cluster: 'llm-gateway'
     environment: 'development'
 
 scrape_configs:
@@ -10,8 +10,8 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  # Scrape the OpenAI proxy running on host machine
-  - job_name: 'openai-proxy'
+  # Scrape the LLM Gateway running on host machine
+  - job_name: 'llm-gateway'
     static_configs:
       - targets: ['host.docker.internal:12345']
     metrics_path: '/metrics'

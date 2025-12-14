@@ -1,6 +1,6 @@
 # Observability Stack
 
-This directory contains the configuration for the observability stack (Prometheus, Grafana, Loki, Promtail) that monitors the OpenAI API Proxy.
+This directory contains the configuration for the observability stack (Prometheus, Grafana, Loki, Promtail) that monitors the LLM Gateway.
 
 ## Architecture
 
@@ -41,7 +41,7 @@ The pre-configured dashboard includes:
 - **Available Processing Slots**: Concurrent request capacity
 - **Request Rate by Priority**: Requests per second by priority level
 - **Queue Wait Time**: p50, p95, p99 percentiles of time spent in queue
-- **OpenAI API Latency**: p50, p95, p99 percentiles of upstream API calls
+- **Upstream API Latency**: p50, p95, p99 percentiles of upstream API calls
 - **Request Outcomes**: Success, evicted, and rejected request rates
 - **Evictions (Last Hour)**: Bar chart of evictions by priority
 - **Rejections (Last Hour)**: Bar chart of rejections by priority
@@ -54,19 +54,19 @@ The proxy exposes Prometheus metrics at: http://localhost:8080/metrics
 Example metrics:
 ```
 # Queue metrics
-openai_proxy_queue_size
-openai_proxy_available_permits
+llm_gateway_queue_size
+llm_gateway_available_permits
 
 # Request counters
-openai_proxy_requests_total{priority_level="normal",status="completed"}
-openai_proxy_requests_outcome_total{outcome="success"}
-openai_proxy_requests_evicted_total{evicted_priority="low"}
-openai_proxy_requests_rejected_total{priority_level="very_low"}
+llm_gateway_requests_total{priority_level="normal",status="completed"}
+llm_gateway_requests_outcome_total{outcome="success"}
+llm_gateway_requests_evicted_total{evicted_priority="low"}
+llm_gateway_requests_rejected_total{priority_level="very_low"}
 
 # Latency histograms
-openai_proxy_queue_duration_seconds
-openai_proxy_openai_duration_seconds
-openai_proxy_request_duration_seconds
+llm_gateway_queue_duration_seconds
+llm_gateway_upstream_api_duration_seconds
+llm_gateway_request_duration_seconds
 ```
 
 ## Log Collection
@@ -84,10 +84,10 @@ cargo run --release 2>&1 | tee -a logs/proxy.log
 
 Example LogQL queries:
 ```
-{job="openai-proxy"}
-{job="openai-proxy"} |= "error"
-{job="openai-proxy"} |= "evicted"
-{job="openai-proxy"} | json | priority > 50
+{job="llm-gateway"}
+{job="llm-gateway"} |= "error"
+{job="llm-gateway"} |= "evicted"
+{job="llm-gateway"} | json | priority > 50
 ```
 
 ## Data Retention

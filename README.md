@@ -1,203 +1,171 @@
-# OpenAI API Proxy
+# LLM Gateway
 
-A thin, high-performance proxy for the OpenAI API with priority-based request queuing.
+A lightweight gateway for OpenAI-compatible APIs that helps multiple teams share limited GPU / LLM capacity without stepping on each other. Think of it as a fair queue in front of your self-hosted model servers.
 
-## Features
+## Why I built this
 
-- **Priority Queue**: Request prioritization with automatic eviction of lower-priority requests when queue is full
-- **OpenAI API Compatible**: Mirrors the OpenAI API endpoints with minimal extensions
-- **Configuration-based**: Control plane managed via YAML config files
-- **Concurrent Processing**: Configurable concurrency limits for optimal resource utilization
+I built this after seeing the same thing happen over and over again with shared on-prem LLM servers: one team starts a heavy workload, the GPUs get saturated, and everyone else’s requests — often live demos — just hang.
 
-## Architecture
+The usual advice is “just add more GPUs”, but that’s expensive and doesn’t really fix the problem. Without explicit rules, shared GPU capacity turns into a free-for-all: some workloads dominate, others starve, and things still break in unpredictable ways.
 
-### Data Plane
+This gateway makes those rules explicit. Instead of teams competing implicitly for GPU time, you define clear traffic classes with guarantees and limits, and the gateway enforces them.
 
-The proxy mirrors the OpenAI API with one extension:
-- **POST /v1/chat/completions**: Chat completions endpoint with optional `priority` parameter
-  - Add `"priority": <integer>` to the request body to set priority (default: 0)
-  - Higher values = higher priority
-  - If queue is full and incoming request priority >= lowest queued priority, the lowest priority request is evicted
+The end result is much more boring — in a good way. Demos stay responsive, background jobs keep moving, and the system degrades gracefully instead of falling over all at once.
 
-### Control Plane
+## What It Does
 
-Configuration is managed via `config.yaml`:
-- **Server settings**: Host and port configuration
-- **Upstream settings**: OpenAI API URL and optional API key
-- **Queue settings**: Max queue size and timeout settings
+The gateway sits between your clients and an OpenAI-compatible endpoint and controls how many requests each group can run at the same time. It handles queuing, fairness, and backpressure so one team can’t accidentally take everything down.
+
+At a high level, it lets you:
+
+- Define traffic classes (for example: `production`, `staging`, or `team-alpha`)
+- Give each class minimum and maximum concurrency guarantees
+- Queue requests when capacity is full instead of timing out immediately
+- Share throughput fairly using simple, configurable weights
+- Kick out lower-priority queued requests when higher-priority traffic needs room
+- Drop it in front of existing OpenAI-style clients without changing their code
+
+## How It Works
+
+### Traffic Classes
+
+You define a small set of named traffic classes and map each API key to exactly one of them. A class can represent a team, an environment, or just a priority level — whatever makes sense for your setup.
+
+Each class has a few knobs:
+
+- **weight** — how much throughput it should get relative to others
+- **priority** — how protected it is from eviction under load
+- **min_concurrency** — how many concurrent requests it’s guaranteed when it has work
+- **max_concurrency** — a hard cap on how many requests it can run at once
+- **max_queue_size** — how many requests can wait before new ones get rejected
+
+Example:
+
+```yaml
+classes:
+  production:
+    weight: 6
+    priority: 100
+    min_concurrency: 3
+    max_concurrency: 8
+
+  staging:
+    weight: 3
+    priority: 50
+    min_concurrency: 1
+    max_concurrency: 5
+
+  testing:
+    weight: 1
+    priority: 10
+    min_concurrency: 0
+    max_concurrency: 3
+```
+
+In short:
+weights decide who gets more throughput, priorities decide who gets kicked out last.
+
+### Scheduling Logic
+
+Internally, each class has its own FIFO queue.
+
+When a request comes in:
+
+The gateway reads the API key and maps it to a traffic class
+
+If that class’s queue is already full, the request is rejected
+
+Otherwise, it gets queued and waits for capacity
+
+Meanwhile, a dispatcher loop continuously looks for work to run:
+
+If there’s no global capacity left, it checks whether eviction is needed
+
+It looks at classes that still have room under their max_concurrency
+
+Classes that haven’t reached their min_concurrency get picked first
+
+Among the remaining candidates, it picks a class based on weight
+
+One request from that class is dispatched
+
+The result is simple and predictable: every class gets its minimum first, and any leftover capacity is shared according to weights.
+
+### Eviction (when things get tight)
+
+Eviction only happens when the system is fully saturated and a higher-priority class still hasn’t reached its guaranteed minimum.
+
+In that case, the gateway:
+
+1. Finds the lowest-priority class with queued requests
+
+2. Removes the newest request from that queue
+
+3. Immediately responds with a 429 Too Many Requests and a Retry-After header
+
+Running requests are never interrupted — eviction only affects queued work.
+
+### Authentication & Trust Model
+
+The gateway doesn’t try to be clever about auth. You configure it.
+
+API keys are mapped to traffic classes in the config file:
+
+```yaml
+credentials:
+  api_keys:
+    "sk-prod-xxx": "production"
+    "sk-staging-xxx": "staging"
+  default_class: null
+  fallback_class: null
+```
+
+Clients send normal OpenAI-style requests. They don’t get to pick their own priority.
 
 ## Configuration
 
-Create a `config.yaml` file:
+Copy config.example.yaml to config.yaml and adjust it for your setup. Most of the knobs are about how you want to divide limited capacity between groups.
 
-```yaml
-server:
-  host: "0.0.0.0"
-  port: 8080
+> [!NOTE]
+> The sum of min_concurrency across all classes must be less than or equal to global_concurrency.
+>
+>If you break this rule, some guarantees can’t be satisfied.
 
-upstream:
-  openai_api_url: "https://api.openai.com"
-  api_key: null  # Optional: set your API key or pass via Authorization header
+## Error Handling
 
-queue:
-  max_queue_size: 100
-  timeout_seconds: 300
-  concurrent_limit: 10
-```
+Errors are returned using OpenAI-style JSON responses:
 
-You can also use environment variables with the `PROXY_` prefix:
-- `PROXY_SERVER__HOST`
-- `PROXY_SERVER__PORT`
-- `PROXY_UPSTREAM__OPENAI_API_URL`
-- `PROXY_UPSTREAM__API_KEY`
-- `PROXY_QUEUE__MAX_QUEUE_SIZE`
-- `PROXY_QUEUE__TIMEOUT_SECONDS`
-- `PROXY_QUEUE__CONCURRENT_LIMIT`
+- 403 — unknown API key or broken class mapping
+- 503 (queue_full) — this class’s queue is full
+- 429 (evicted) — the request was queued but pushed out by higher-priority traffic
+- 504 (timeout) — the request spent too long in the system overall
 
-## Usage
+Retryable errors include a Retry-After header and a request ID for debugging.
 
-### Building
+## Observability
 
-```bash
-cargo build --release
-```
+The gateway exposes Prometheus metrics at /metrics and logs all scheduling decisions.
 
-### Running
+You can see:
 
-```bash
-cargo run --release
-```
+- how many requests are queued or running per class
+- who’s getting evicted or rejected
+- how long requests spend waiting vs. running
 
-Or with the binary:
-```bash
-./target/release/openai-api-proxy
-```
+There’s also a prebuilt Grafana dashboard if you want something visual.
 
-### Making Requests
+## Limitations & Gotchas
 
-Standard OpenAI API request (priority 0):
-```bash
-curl -X POST http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -d '{
-    "model": "gpt-4",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
-```
+This gateway:
 
-High priority request:
-```bash
-curl -X POST http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -d '{
-    "model": "gpt-4",
-    "messages": [{"role": "user", "content": "Urgent request!"}],
-    "priority": 100
-  }'
-```
+- schedules and queues /v1/chat/completions
+- helps multiple teams share a single pool of GPUs sanely
 
-Health check:
-```bash
-curl http://localhost:8080/health
-```
+It does not:
 
-## Priority Queue Behavior
+- stream responses (yet)
+- handle every OpenAI endpoint
+- guarantee perfect fairness under all conditions
+- preempt running requests
 
-1. Requests are queued based on priority (higher values = higher priority)
-2. Within the same priority level, requests are processed FIFO
-3. When queue reaches `max_queue_size`:
-   - If new request priority >= lowest queued priority: evict lowest and queue new request
-   - If new request priority < lowest queued priority: reject with 503 error
-4. Evicted requests receive a 503 error with type "evicted"
-5. Concurrent processing limit controlled by `concurrent_limit` config (default: 10)
-
-## Error Responses
-
-The proxy returns standard OpenAI-compatible error responses:
-
-- **503 Service Unavailable** (queue_full): Queue is full and request priority too low
-- **503 Service Unavailable** (evicted): Request was evicted by higher priority request
-- **504 Gateway Timeout** (timeout): Request exceeded timeout limit
-
-## Observability & Monitoring
-
-The proxy exposes Prometheus metrics at `/metrics` endpoint and includes a complete observability stack.
-
-### Quick Start with Observability
-
-Run the proxy with the observability stack (Prometheus, Grafana, Loki):
-
-```bash
-./bin/start-demo.sh
-```
-
-This starts:
-- **Grafana** at http://localhost:3000 (admin/admin) - Pre-configured dashboards
-- **Prometheus** at http://localhost:9090 - Metrics storage
-- **Loki** at http://localhost:3100 - Log aggregation
-
-### Metrics Exposed
-
-- `openai_proxy_queue_size` - Current queue size
-- `openai_proxy_available_permits` - Available processing slots
-- `openai_proxy_requests_total` - Total requests by priority and status
-- `openai_proxy_requests_outcome_total` - Requests by outcome (success/evicted/rejected)
-- `openai_proxy_queue_duration_seconds` - Queue wait time histogram
-- `openai_proxy_openai_duration_seconds` - OpenAI API call duration histogram
-- `openai_proxy_request_duration_seconds` - Total request duration histogram
-- `openai_proxy_requests_evicted_total` - Evicted requests counter
-- `openai_proxy_requests_rejected_total` - Rejected requests counter
-
-### Grafana Dashboard
-
-The included dashboard shows:
-- Real-time queue size and available slots
-- Request rate by priority level
-- Latency percentiles (p50, p95, p99) for queue time and OpenAI API calls
-- Request outcomes (success/evicted/rejected)
-- Evictions and rejections by priority
-- Live log streaming
-
-See [observability/README.md](observability/README.md) for detailed documentation.
-
-## Logging
-
-The proxy includes comprehensive logging for queue operations:
-
-- **INFO level**: Request lifecycle (enqueued, dequeued, completed), evictions, latency metrics
-- **DEBUG level**: Queue state, semaphore permits, request forwarding
-- **WARN level**: Queue full conditions, rejections, evictions
-- **ERROR level**: Upstream failures
-
-Run with different log levels:
-```bash
-# Info level (default)
-cargo run --release
-
-# Debug level (detailed queue operations)
-RUST_LOG=debug cargo run
-
-# Trace level (maximum verbosity)
-RUST_LOG=trace cargo run
-
-# Component-specific logging
-RUST_LOG=openai_api_proxy::queue=debug cargo run
-```
-
-## Development
-
-Run with debug logging:
-```bash
-RUST_LOG=debug cargo run
-```
-
-Run tests:
-```bash
-cargo test
-```
-
-## License
-
-MIT
+Use it as a building block, not a complete solution.

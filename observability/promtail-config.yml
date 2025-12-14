@@ -9,13 +9,13 @@ clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-  # Scrape logs from the proxy logs directory
-  - job_name: openai-proxy-logs
+  # Scrape logs from the gateway logs directory
+  - job_name: llm-gateway-logs
     static_configs:
       - targets:
           - localhost
         labels:
-          job: openai-proxy
+          job: llm-gateway
           __path__: /logs/*.log
     pipeline_stages:
       - regex:

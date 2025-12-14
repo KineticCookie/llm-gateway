@@ -1,7 +1,29 @@
 services:
+  proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: llm-gateway
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./logs:/app/logs
+    environment:
+      - RUST_LOG=info
+    restart: unless-stopped
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
   prometheus:
     image: prom/prometheus:latest
-    container_name: openai-proxy-prometheus
+    container_name: llm-gateway-prometheus
     ports:
       - "9090:9090"
     volumes:
@@ -20,7 +42,7 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    container_name: openai-proxy-grafana
+    container_name: llm-gateway-grafana
     ports:
       - "3000:3000"
     environment:
@@ -41,7 +63,7 @@ services:
 
   loki:
     image: grafana/loki:latest
-    container_name: openai-proxy-loki
+    container_name: llm-gateway-loki
     ports:
       - "3100:3100"
     volumes:
@@ -54,7 +76,7 @@ services:
 
   promtail:
     image: grafana/promtail:latest
-    container_name: openai-proxy-promtail
+    container_name: llm-gateway-promtail
     volumes:
       - ./observability/promtail-config.yml:/etc/promtail/config.yml
       - /var/log:/var/log:ro

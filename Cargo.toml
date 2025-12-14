@@ -1,5 +1,5 @@
 [package]
-name = "openai-api-proxy"
+name = "llm-gateway"
 version = "0.1.0"
 edition = "2021"
 
@@ -18,3 +18,5 @@ thiserror = "1.0"
 anyhow = "1.0"
 prometheus = "0.13"
 lazy_static = "1.4"
+rand = "0.8"
+uuid = { version = "1.11", features = ["v4"] }
