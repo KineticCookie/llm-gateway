@@ -1,0 +1,36 @@
+# Example configuration for OpenAI API Proxy
+# Copy this file to config.yaml and customize as needed
+
+server:
+  # Host to bind the server to
+  # Use "0.0.0.0" to accept connections from any network interface
+  # Use "127.0.0.1" for localhost only
+  host: "0.0.0.0"
+  
+  # Port to listen on
+  port: 8080
+
+upstream:
+  # OpenAI API base URL (without /v1 suffix)
+  # For OpenAI: https://api.openai.com
+  # For Azure OpenAI: https://YOUR_RESOURCE_NAME.openai.azure.com
+  openai_api_url: "https://api.openai.com"
+  
+  # Optional: API key to use for upstream requests
+  # If not set, the proxy will forward the Authorization header from incoming requests
+  # You can also set this via environment variable: PROXY_UPSTREAM__API_KEY
+  api_key: null
+
+queue:
+  # Maximum number of requests that can be queued
+  # When this limit is reached, new requests with priority >= lowest queued priority
+  # will evict the lowest priority request
+  max_queue_size: 100
+  
+  # Timeout for queued requests in seconds
+  # Requests waiting longer than this will receive a timeout error
+  timeout_seconds: 300
+  
+  # Maximum number of requests to process concurrently
+  # Controls how many requests can be actively processed at the same time
+  concurrent_limit: 10

@@ -1,0 +1,28 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Scrape logs from the proxy logs directory
+  - job_name: openai-proxy-logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: openai-proxy
+          __path__: /logs/*.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\S+)\s+(?P<level>\S+)\s+(?P<target>\S+):\s+(?P<message>.*)$'
+      - labels:
+          level:
+          target:
+      - timestamp:
+          source: timestamp
+          format: RFC3339

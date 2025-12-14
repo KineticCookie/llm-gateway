@@ -1,0 +1,6 @@
+/target
+Cargo.lock
+.env
+config.yaml
+logs/
+*.log

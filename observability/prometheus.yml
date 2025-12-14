@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+  external_labels:
+    cluster: 'openai-proxy'
+    environment: 'development'
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Scrape the OpenAI proxy running on host machine
+  - job_name: 'openai-proxy'
+    static_configs:
+      - targets: ['host.docker.internal:12345']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scrape_timeout: 3s
