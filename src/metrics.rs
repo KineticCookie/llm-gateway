@@ -5,13 +5,111 @@ use prometheus::{
 };
 
 lazy_static! {
-    // Counter for total requests received
-    pub static ref REQUESTS_TOTAL: CounterVec = register_counter_vec!(
-        "llm_gateway_requests_total",
-        "Total number of requests received",
+    // ===========================================
+    // SYNC (Non-streaming) Request Metrics
+    // ===========================================
+
+    // Counter for total sync requests received
+    pub static ref SYNC_REQUESTS_TOTAL: CounterVec = register_counter_vec!(
+        "llm_gateway_sync_requests_total",
+        "Total number of non-streaming requests received",
         &["class", "status"]
     )
     .unwrap();
+
+    // Histogram for sync OpenAI API call duration by class
+    pub static ref SYNC_OPENAI_DURATION: HistogramVec = register_histogram_vec!(
+        "llm_gateway_sync_upstream_duration_seconds",
+        "Time spent calling OpenAI API for sync requests by traffic class",
+        &["class", "status"],
+        vec![0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0]
+    )
+    .unwrap();
+
+    // Counter for sync upstream OpenAI responses by class and HTTP status code
+    pub static ref SYNC_OPENAI_RESPONSES: CounterVec = register_counter_vec!(
+        "llm_gateway_sync_upstream_responses_total",
+        "Total number of sync responses received from OpenAI by traffic class and HTTP status code",
+        &["class", "status_code"]
+    )
+    .unwrap();
+
+    // Histogram for total sync request duration by class
+    pub static ref SYNC_REQUEST_DURATION: HistogramVec = register_histogram_vec!(
+        "llm_gateway_sync_request_duration_seconds",
+        "Total sync request duration including queue and upstream time",
+        &["class", "status"],
+        vec![0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0]
+    )
+    .unwrap();
+
+    // ===========================================
+    // ASYNC (Streaming) Request Metrics
+    // ===========================================
+
+    // Counter for total async requests received
+    pub static ref ASYNC_REQUESTS_TOTAL: CounterVec = register_counter_vec!(
+        "llm_gateway_async_requests_total",
+        "Total number of streaming requests received",
+        &["class", "status"]
+    )
+    .unwrap();
+
+    // Histogram for Time To First Token (TTFT)
+    pub static ref ASYNC_TTFT: HistogramVec = register_histogram_vec!(
+        "llm_gateway_async_ttft_seconds",
+        "Time to first token for streaming requests (includes queue + upstream TTFT)",
+        &["class"],
+        vec![0.1, 0.25, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0, 15.0, 30.0]
+    )
+    .unwrap();
+
+    // Histogram for Time To Last Token (stream duration)
+    pub static ref ASYNC_STREAM_DURATION: HistogramVec = register_histogram_vec!(
+        "llm_gateway_async_stream_duration_seconds",
+        "Total streaming duration from first to last token",
+        &["class"],
+        vec![1.0, 5.0, 10.0, 20.0, 30.0, 45.0, 60.0, 90.0, 120.0, 180.0]
+    )
+    .unwrap();
+
+    // Histogram for Tokens Per Second
+    pub static ref ASYNC_TOKENS_PER_SECOND: HistogramVec = register_histogram_vec!(
+        "llm_gateway_async_tokens_per_second",
+        "Tokens generated per second for streaming requests",
+        &["class"],
+        vec![1.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 75.0, 100.0]
+    )
+    .unwrap();
+
+    // Counter for total tokens generated in streaming
+    pub static ref ASYNC_TOKENS_GENERATED: CounterVec = register_counter_vec!(
+        "llm_gateway_async_tokens_generated_total",
+        "Total number of tokens generated in streaming responses",
+        &["class"]
+    )
+    .unwrap();
+
+    // Counter for streaming completion status
+    pub static ref ASYNC_STREAM_COMPLETION: CounterVec = register_counter_vec!(
+        "llm_gateway_async_stream_completion_total",
+        "Streaming request completion status (complete, client_disconnect, error)",
+        &["class", "status"]
+    )
+    .unwrap();
+
+    // Histogram for total async request duration (queue + full stream)
+    pub static ref ASYNC_REQUEST_DURATION: HistogramVec = register_histogram_vec!(
+        "llm_gateway_async_request_duration_seconds",
+        "Total async request duration including queue and full streaming time",
+        &["class"],
+        vec![1.0, 5.0, 10.0, 20.0, 30.0, 45.0, 60.0, 90.0, 120.0, 180.0]
+    )
+    .unwrap();
+
+    // ===========================================
+    // Common Metrics (both sync and async)
+    // ===========================================
 
     // Counter for requests by outcome
     pub static ref REQUESTS_OUTCOME: CounterVec = register_counter_vec!(
@@ -50,32 +148,6 @@ lazy_static! {
         "Time spent waiting in queue by traffic class",
         &["class"],
         vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
-    )
-    .unwrap();
-
-    // Histogram for OpenAI API call duration by class
-    pub static ref OPENAI_DURATION: HistogramVec = register_histogram_vec!(
-        "llm_gateway_upstream_duration_seconds",
-        "Time spent calling OpenAI API by traffic class",
-        &["class", "status"],
-        vec![0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0]
-    )
-    .unwrap();
-
-    // Counter for upstream OpenAI responses by class and HTTP status code
-    pub static ref OPENAI_RESPONSES: CounterVec = register_counter_vec!(
-        "llm_gateway_upstream_responses_total",
-        "Total number of responses received from OpenAI by traffic class and HTTP status code",
-        &["class", "status_code"]
-    )
-    .unwrap();
-
-    // Histogram for total request duration by class
-    pub static ref REQUEST_DURATION: HistogramVec = register_histogram_vec!(
-        "llm_gateway_request_duration_seconds",
-        "Total request duration including queue and upstream time",
-        &["class", "status"],
-        vec![0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0]
     )
     .unwrap();
 

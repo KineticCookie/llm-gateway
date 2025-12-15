@@ -2,14 +2,16 @@ use axum::{
     body::Bytes,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Response, Sse},
     Json,
 };
 use rand::Rng;
 use serde::Serialize;
 use serde_json::Value;
+use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Instant;
+use tokio_stream::{Stream, StreamExt};
 use uuid::Uuid;
 
 use crate::config::ProxyConfig;
@@ -196,6 +198,7 @@ fn extract_traffic_class(
 }
 
 /// Handler for POST /v1/chat/completions
+/// Detects streaming vs sync from upstream response content-type
 pub async fn chat_completions(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -214,11 +217,6 @@ pub async fn chat_completions(
 
     let class_str = traffic_class.as_str().to_string();
 
-    // Record incoming request
-    metrics::REQUESTS_TOTAL
-        .with_label_values(&[&class_str, "received"])
-        .inc();
-
     tracing::info!(
         "Received chat completion request: class={}, body_size={}",
         class_str,
@@ -226,11 +224,6 @@ pub async fn chat_completions(
     );
 
     // Enqueue the request
-    tracing::debug!(
-        "Enqueueing request with class={}, request_id={}",
-        class_str,
-        request_id
-    );
     let enqueue_start = Instant::now();
     let rx = state
         .scheduler
@@ -347,66 +340,246 @@ pub async fn chat_completions(
 
     let status = response.status();
     let response_headers = response.headers().clone();
-    let body = response
-        .bytes()
-        .await
-        .map_err(|_| StatusCode::BAD_GATEWAY)?;
 
-    let openai_duration = openai_start.elapsed();
-    let total_duration = request_start.elapsed();
+    // Check if response is streaming based on content-type
+    let is_streaming = response_headers
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .map(|ct| ct.contains("text/event-stream"))
+        .unwrap_or(false);
 
-    let status_label = status.as_u16().to_string();
+    if is_streaming {
+        // Handle streaming response
+        metrics::ASYNC_REQUESTS_TOTAL
+            .with_label_values(&[&class_str, "received"])
+            .inc();
 
-    // Record metrics
-    metrics::OPENAI_DURATION
-        .with_label_values(&[&class_str, &status_label])
-        .observe(openai_duration.as_secs_f64());
+        tracing::info!(
+            "Handling streaming response: class={}, request_id={}",
+            class_str,
+            request_id
+        );
 
-    metrics::REQUEST_DURATION
-        .with_label_values(&[&class_str, &status_label])
-        .observe(total_duration.as_secs_f64());
-
-    // Count upstream OpenAI response status codes for easier querying
-    metrics::OPENAI_RESPONSES
-        .with_label_values(&[&class_str, &status_label])
-        .inc();
-
-    metrics::REQUESTS_TOTAL
-        .with_label_values(&[&class_str, "completed"])
-        .inc();
-    metrics::REQUESTS_OUTCOME
-        .with_label_values(&["success"])
-        .inc();
-
-    tracing::info!(
-        "Request completed: class={}, status={}, body_size={} bytes, \
-         queue_time_ms={}, openai_time_ms={}, total_time_ms={}, request_id={}",
-        class_str,
-        status,
-        body.len(),
-        queue_duration.as_millis(),
-        openai_duration.as_millis(),
-        total_duration.as_millis(),
-        request_id
-    );
-
-    // Build response
-    let mut builder = axum::http::Response::builder()
-        .status(status)
-        .header("x-proxy-request-id", &request_id);
-
-    // Copy relevant response headers
-    for (name, value) in response_headers.iter() {
-        let name_str = name.as_str();
-        if name_str == "content-type"
-            || name_str.starts_with("x-")
-            || name_str.starts_with("openai-")
-        {
-            builder = builder.header(name, value);
+        if !status.is_success() {
+            tracing::error!("OpenAI returned error status: {}", status);
+            metrics::ASYNC_STREAM_COMPLETION
+                .with_label_values(&[&class_str, "error"])
+                .inc();
+            return Err(StatusCode::BAD_GATEWAY);
         }
-    }
 
-    Ok(builder.body(axum::body::Body::from(body)).unwrap())
+        let stream = response.bytes_stream();
+        let sse_stream = create_streaming_response(
+            stream,
+            class_str.clone(),
+            request_id.clone(),
+            request_start,
+            queue_duration,
+        );
+
+        let sse_response = Sse::new(sse_stream);
+
+        let mut response = sse_response.into_response();
+        response
+            .headers_mut()
+            .insert("x-proxy-request-id", request_id.parse().unwrap());
+        response
+            .headers_mut()
+            .insert("cache-control", "no-cache".parse().unwrap());
+        response
+            .headers_mut()
+            .insert("x-accel-buffering", "no".parse().unwrap());
+
+        metrics::ASYNC_REQUESTS_TOTAL
+            .with_label_values(&[&class_str, "started"])
+            .inc();
+
+        Ok(response)
+    } else {
+        // Handle sync response
+        metrics::SYNC_REQUESTS_TOTAL
+            .with_label_values(&[&class_str, "received"])
+            .inc();
+
+        let body = response
+            .bytes()
+            .await
+            .map_err(|_| StatusCode::BAD_GATEWAY)?;
+
+        let openai_duration = openai_start.elapsed();
+        let total_duration = request_start.elapsed();
+        let status_label = status.as_u16().to_string();
+
+        // Record sync metrics
+        metrics::SYNC_OPENAI_DURATION
+            .with_label_values(&[&class_str, &status_label])
+            .observe(openai_duration.as_secs_f64());
+
+        metrics::SYNC_REQUEST_DURATION
+            .with_label_values(&[&class_str, &status_label])
+            .observe(total_duration.as_secs_f64());
+
+        metrics::SYNC_OPENAI_RESPONSES
+            .with_label_values(&[&class_str, &status_label])
+            .inc();
+
+        metrics::SYNC_REQUESTS_TOTAL
+            .with_label_values(&[&class_str, "completed"])
+            .inc();
+
+        metrics::REQUESTS_OUTCOME
+            .with_label_values(&["success"])
+            .inc();
+
+        tracing::info!(
+            "Sync request completed: class={}, status={}, body_size={} bytes, \
+             queue_time_ms={}, openai_time_ms={}, total_time_ms={}, request_id={}",
+            class_str,
+            status,
+            body.len(),
+            queue_duration.as_millis(),
+            openai_duration.as_millis(),
+            total_duration.as_millis(),
+            request_id
+        );
+
+        // Build response
+        let mut builder = axum::http::Response::builder()
+            .status(status)
+            .header("x-proxy-request-id", &request_id);
+
+        // Copy relevant response headers
+        for (name, value) in response_headers.iter() {
+            let name_str = name.as_str();
+            if name_str == "content-type"
+                || name_str.starts_with("x-")
+                || name_str.starts_with("openai-")
+            {
+                builder = builder.header(name, value);
+            }
+        }
+
+        Ok(builder.body(axum::body::Body::from(body)).unwrap())
+    }
+}
+
+/// Create the SSE stream with metrics tracking
+fn create_streaming_response(
+    stream: impl Stream<Item = Result<Bytes, reqwest::Error>> + Send + 'static,
+    class_str: String,
+    request_id: String,
+    request_start: Instant,
+    _queue_duration: std::time::Duration,
+) -> impl Stream<Item = Result<axum::response::sse::Event, Infallible>> {
+    let mut first_token_received = false;
+    let mut token_count = 0u64;
+    let mut stream_start = None;
+    let class_str = Arc::new(class_str);
+
+    stream
+        .map(move |chunk_result| {
+            let class_str = Arc::clone(&class_str);
+            match chunk_result {
+                Ok(chunk) => {
+                    // Record first token timing
+                    if !first_token_received {
+                        first_token_received = true;
+                        let ttft = request_start.elapsed();
+                        stream_start = Some(Instant::now());
+                        metrics::ASYNC_TTFT
+                            .with_label_values(&[&class_str])
+                            .observe(ttft.as_secs_f64());
+                        tracing::debug!(
+                            "First token received: request_id={}, ttft_ms={}",
+                            request_id,
+                            ttft.as_millis()
+                        );
+                    }
+
+                    // Parse SSE chunks to count tokens and extract data payloads
+                    let chunk_str = String::from_utf8_lossy(&chunk);
+                    let mut data_lines = Vec::new();
+                    
+                    for line in chunk_str.lines() {
+                        if line.starts_with("data: ") {
+                            let data = &line[6..];
+                            data_lines.push(data);
+                            
+                            if data == "[DONE]" {
+                                // Stream completed successfully
+                                if let Some(start) = stream_start {
+                                    let stream_duration = start.elapsed();
+                                    let total_duration = request_start.elapsed();
+                                    
+                                    metrics::ASYNC_STREAM_DURATION
+                                        .with_label_values(&[&class_str])
+                                        .observe(stream_duration.as_secs_f64());
+                                    
+                                    metrics::ASYNC_REQUEST_DURATION
+                                        .with_label_values(&[&class_str])
+                                        .observe(total_duration.as_secs_f64());
+                                    
+                                    if token_count > 0 && stream_duration.as_secs_f64() > 0.0 {
+                                        let tps = token_count as f64 / stream_duration.as_secs_f64();
+                                        metrics::ASYNC_TOKENS_PER_SECOND
+                                            .with_label_values(&[&class_str])
+                                            .observe(tps);
+                                    }
+                                    
+                                    metrics::ASYNC_TOKENS_GENERATED
+                                        .with_label_values(&[&class_str])
+                                        .inc_by(token_count as f64);
+                                    
+                                    metrics::ASYNC_STREAM_COMPLETION
+                                        .with_label_values(&[&class_str, "complete"])
+                                        .inc();
+                                    
+                                    metrics::REQUESTS_OUTCOME
+                                        .with_label_values(&["success"])
+                                        .inc();
+                                    
+                                    tracing::info!(
+                                        "Stream completed: request_id={}, tokens={}, duration_ms={}, tps={:.2}",
+                                        request_id,
+                                        token_count,
+                                        stream_duration.as_millis(),
+                                        token_count as f64 / stream_duration.as_secs_f64()
+                                    );
+                                }
+                            } else if let Ok(json) = serde_json::from_str::<Value>(data) {
+                                // Count tokens in delta
+                                if let Some(choices) = json.get("choices").and_then(|c| c.as_array()) {
+                                    for choice in choices {
+                                        if choice.get("delta")
+                                            .and_then(|d| d.get("content"))
+                                            .and_then(|c| c.as_str())
+                                            .is_some() {
+                                            token_count += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Return the data payload (without "data: " prefix since Event::data() adds it)
+                    // Join multiple data lines with newlines if needed
+                    if data_lines.is_empty() {
+                        // Empty chunk, send keep-alive
+                        Ok(axum::response::sse::Event::default().comment(""))
+                    } else {
+                        Ok(axum::response::sse::Event::default().data(data_lines.join("\n")))
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Stream error: request_id={}, error={}", request_id, e);
+                    metrics::ASYNC_STREAM_COMPLETION
+                        .with_label_values(&[&class_str, "error"])
+                        .inc();
+                    Ok(axum::response::sse::Event::default().data("error"))
+                }
+            }
+        })
 }
 
 /// Handler for other OpenAI API endpoints (pass-through without queuing)
@@ -451,7 +624,7 @@ pub async fn proxy_request(
     let status_label = status.as_u16().to_string();
 
     // Count upstream OpenAI response status codes for pass-through requests
-    metrics::OPENAI_RESPONSES
+    metrics::SYNC_OPENAI_RESPONSES
         .with_label_values(&[&class_str, &status_label])
         .inc();
 

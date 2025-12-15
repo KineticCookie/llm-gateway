@@ -16,7 +16,7 @@ mkdir -p logs
 
 # Start the observability stack
 echo "Starting observability stack..."
-docker compose up -d
+docker compose up --build -d
 
 # if docker compose fails, exit the script
 if [ $? -ne 0 ]; then
