@@ -42,4 +42,6 @@ echo "Logs will be written to: logs/proxy.log"
 echo ""
 
 # Run the proxy with logging
-RUST_LOG=info cargo run --release 2>&1 | tee -a logs/proxy.log
+# RUST_LOG=info cargo run --release 2>&1 | tee -a logs/proxy.log
+
+docker compose logs -f
