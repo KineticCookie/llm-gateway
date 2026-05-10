@@ -3,9 +3,12 @@ services:
     image: ghcr.io/ggml-org/llama.cpp:server
     ports:
       - "8080:8080"
+    environment:
+      - HF_HOME=/hf-cache
+    volumes:
+      - ./models:/hf-cache
     command: >
       --hf-repo unsloth/gemma-3-1b-it-GGUF
-      --verbose
       --host 0.0.0.0
       --port 8080
       --ctx-size 4096

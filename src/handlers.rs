@@ -66,7 +66,10 @@ fn error_response(status: StatusCode, error_type: &str, message: String) -> Resp
 }
 
 /// Extract project name from Authorization or x-api-key header.
-fn resolve_project<'a>(headers: &HeaderMap, config: &'a ProxyConfig) -> Result<&'a str, Response> {
+fn resolve_project<'a>(
+    headers: &HeaderMap,
+    config: &'a ProxyConfig,
+) -> Result<&'a str, Box<Response>> {
     let api_key = headers
         .get("authorization")
         .and_then(|h| h.to_str().ok())
@@ -75,30 +78,34 @@ fn resolve_project<'a>(headers: &HeaderMap, config: &'a ProxyConfig) -> Result<&
 
     match api_key {
         None => {
-            metrics::UNKNOWN_CREDENTIALS.with_label_values(&["no_key"]).inc();
+            metrics::UNKNOWN_CREDENTIALS
+                .with_label_values(&["no_key"])
+                .inc();
 
             match config.unauthenticated.project_name() {
                 Some(name) => Ok(name),
-                None => Err(error_response(
+                None => Err(Box::new(error_response(
                     StatusCode::FORBIDDEN,
                     "no_credentials",
                     "No API key provided".to_string(),
-                )),
+                ))),
             }
         }
         Some(key) => match config.project_for_key(key) {
             Some(name) => Ok(name),
             None => {
-                metrics::UNKNOWN_CREDENTIALS.with_label_values(&["unknown_key"]).inc();
+                metrics::UNKNOWN_CREDENTIALS
+                    .with_label_values(&["unknown_key"])
+                    .inc();
                 tracing::warn!("Unknown API key: {}...", &key[..key.len().min(8)]);
 
                 match config.unauthenticated.project_name() {
                     Some(name) => Ok(name),
-                    None => Err(error_response(
+                    None => Err(Box::new(error_response(
                         StatusCode::FORBIDDEN,
                         "unknown_key",
                         "Unknown API key".to_string(),
-                    )),
+                    ))),
                 }
             }
         },
@@ -115,7 +122,7 @@ pub async fn chat_completions(
 
     let project_name = match resolve_project(&headers, &state.config) {
         Ok(p) => p.to_string(),
-        Err(resp) => return resp,
+        Err(resp) => return *resp,
     };
 
     tracing::info!(
@@ -129,14 +136,18 @@ pub async fn chat_completions(
     let rx = match state.scheduler.enqueue(&project_name).await {
         Ok(rx) => rx,
         Err(QueueError::QueueFull(_)) => {
-            metrics::REQUESTS_TOTAL.with_label_values(&[&project_name, "rejected"]).inc();
+            metrics::REQUESTS_TOTAL
+                .with_label_values(&[&project_name, "rejected"])
+                .inc();
             let mut resp = error_response(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "queue_full",
                 format!("Queue is full for project: {}", project_name),
             );
-            resp.headers_mut().insert("retry-after", "5".parse().unwrap());
-            resp.headers_mut().insert("x-request-id", request_id.parse().unwrap());
+            resp.headers_mut()
+                .insert("retry-after", "5".parse().unwrap());
+            resp.headers_mut()
+                .insert("x-request-id", request_id.parse().unwrap());
             return resp;
         }
         Err(e) => {
@@ -153,21 +164,32 @@ pub async fn chat_completions(
             let mut resp = error_response(
                 StatusCode::TOO_MANY_REQUESTS,
                 "evicted",
-                format!("Request evicted due to higher priority traffic (project: {})", project_name),
+                format!(
+                    "Request evicted due to higher priority traffic (project: {})",
+                    project_name
+                ),
             );
-            resp.headers_mut().insert("retry-after", "5".parse().unwrap());
-            resp.headers_mut().insert("x-request-id", request_id.parse().unwrap());
+            resp.headers_mut()
+                .insert("retry-after", "5".parse().unwrap());
+            resp.headers_mut()
+                .insert("x-request-id", request_id.parse().unwrap());
             return resp;
         }
         Err(QueueError::Timeout(_)) => {
-            metrics::REQUESTS_TOTAL.with_label_values(&[&project_name, "timeout"]).inc();
+            metrics::REQUESTS_TOTAL
+                .with_label_values(&[&project_name, "timeout"])
+                .inc();
 
             let mut resp = error_response(
                 StatusCode::GATEWAY_TIMEOUT,
                 "timeout",
-                format!("Request timed out waiting for a slot (project: {})", project_name),
+                format!(
+                    "Request timed out waiting for a slot (project: {})",
+                    project_name
+                ),
             );
-            resp.headers_mut().insert("x-request-id", request_id.parse().unwrap());
+            resp.headers_mut()
+                .insert("x-request-id", request_id.parse().unwrap());
             return resp;
         }
         Err(e) => {
@@ -206,7 +228,9 @@ pub async fn chat_completions(
         Ok(r) => r,
         Err(e) => {
             tracing::error!(request_id = %request_id, "upstream request failed: {}", e);
-            metrics::REQUESTS_TOTAL.with_label_values(&[&project_name, "upstream_error"]).inc();
+            metrics::REQUESTS_TOTAL
+                .with_label_values(&[&project_name, "upstream_error"])
+                .inc();
             return StatusCode::BAD_GATEWAY.into_response();
         }
     };
@@ -222,7 +246,9 @@ pub async fn chat_completions(
 
     if is_streaming {
         if !status.is_success() {
-            metrics::REQUESTS_TOTAL.with_label_values(&[&project_name, "upstream_error"]).inc();
+            metrics::REQUESTS_TOTAL
+                .with_label_values(&[&project_name, "upstream_error"])
+                .inc();
             return StatusCode::BAD_GATEWAY.into_response();
         }
 
@@ -233,13 +259,16 @@ pub async fn chat_completions(
             request_id.clone(),
             request_start,
             upstream_start,
-            permit,  // permit lives until stream is exhausted or dropped
+            permit, // permit lives until stream is exhausted or dropped
         );
 
         let mut resp = Sse::new(sse_stream).into_response();
-        resp.headers_mut().insert("x-request-id", request_id.parse().unwrap());
-        resp.headers_mut().insert("cache-control", "no-cache".parse().unwrap());
-        resp.headers_mut().insert("x-accel-buffering", "no".parse().unwrap());
+        resp.headers_mut()
+            .insert("x-request-id", request_id.parse().unwrap());
+        resp.headers_mut()
+            .insert("cache-control", "no-cache".parse().unwrap());
+        resp.headers_mut()
+            .insert("x-accel-buffering", "no".parse().unwrap());
         resp
     } else {
         let body_bytes = match upstream_resp.bytes().await {
@@ -255,7 +284,14 @@ pub async fn chat_completions(
             .with_label_values(&[&project_name])
             .observe(upstream_ms.as_secs_f64());
         metrics::REQUESTS_TOTAL
-            .with_label_values(&[&project_name, if status.is_success() { "success" } else { "upstream_error" }])
+            .with_label_values(&[
+                &project_name,
+                if status.is_success() {
+                    "success"
+                } else {
+                    "upstream_error"
+                },
+            ])
             .inc();
 
         tracing::info!(
@@ -293,7 +329,8 @@ fn streaming_response(
 ) -> impl Stream<Item = Result<axum::response::sse::Event, Infallible>> {
     let project = Arc::new(project);
     let request_id = Arc::new(request_id);
-    let first_token_at: Arc<std::sync::Mutex<Option<Instant>>> = Arc::new(std::sync::Mutex::new(None));
+    let first_token_at: Arc<std::sync::Mutex<Option<Instant>>> =
+        Arc::new(std::sync::Mutex::new(None));
 
     let inner = stream.flat_map(move |chunk_result| {
         let project = Arc::clone(&project);
@@ -366,7 +403,10 @@ fn streaming_response(
         futures::stream::iter(events)
     });
 
-    PermitStream { inner, _permit: permit }
+    PermitStream {
+        inner,
+        _permit: permit,
+    }
 }
 
 pub async fn health_check() -> StatusCode {

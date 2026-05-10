@@ -119,7 +119,10 @@ impl ProxyConfig {
 
     fn validate(&self) -> Result<()> {
         anyhow::ensure!(self.slots > 0, "slots must be > 0");
-        anyhow::ensure!(!self.projects.is_empty(), "at least one project must be configured");
+        anyhow::ensure!(
+            !self.projects.is_empty(),
+            "at least one project must be configured"
+        );
 
         // Validate unauthenticated policy refers to a real project
         if let Some(project_name) = self.unauthenticated.project_name() {
@@ -133,15 +136,15 @@ impl ProxyConfig {
         // Validate each project
         let mut seen_keys: HashSet<&str> = HashSet::new();
         for (name, project) in &self.projects {
-            anyhow::ensure!(project.priority >= 1, "project '{}': priority must be >= 1", name);
+            anyhow::ensure!(
+                project.priority >= 1,
+                "project '{}': priority must be >= 1",
+                name
+            );
             anyhow::ensure!(project.share >= 1, "project '{}': share must be >= 1", name);
 
             if let Some(max_slots) = project.max_slots {
-                anyhow::ensure!(
-                    max_slots >= 1,
-                    "project '{}': max_slots must be >= 1",
-                    name
-                );
+                anyhow::ensure!(max_slots >= 1, "project '{}': max_slots must be >= 1", name);
                 anyhow::ensure!(
                     max_slots <= self.slots,
                     "project '{}': max_slots ({}) exceeds global slots ({})",

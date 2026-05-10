@@ -182,7 +182,11 @@ impl ClassBasedScheduler {
             .with_label_values(&[project_name])
             .set(queue.items.len() as f64);
 
-        tracing::debug!("Enqueued request: project={}, queue_size={}", project_name, queue.items.len());
+        tracing::debug!(
+            "Enqueued request: project={}, queue_size={}",
+            project_name,
+            queue.items.len()
+        );
 
         // Wake dispatch loop — a new request is available
         self.notify.notify_one();
@@ -248,8 +252,7 @@ impl ClassBasedScheduler {
                     metrics::PROJECT_IN_FLIGHT
                         .with_label_values(&[&project_name])
                         .set(in_flight as f64);
-                    metrics::SLOTS_IN_USE
-                        .set(state.global_in_flight as f64);
+                    metrics::SLOTS_IN_USE.set(state.global_in_flight as f64);
                     metrics::QUEUE_WAIT
                         .with_label_values(&[&project_name])
                         .observe(queue_wait.as_secs_f64());
@@ -284,9 +287,10 @@ impl ClassBasedScheduler {
     /// evict the most recently queued request from the lowest-priority tier.
     fn try_evict(&self, state: &mut SchedulerState) {
         // Find the lowest priority tier that has queued work and hasn't hit max_slots
-        let needs_dispatch = state.projects.values().any(|q| {
-            !q.items.is_empty() && q.in_flight < q.max_slots
-        });
+        let needs_dispatch = state
+            .projects
+            .values()
+            .any(|q| !q.items.is_empty() && q.in_flight < q.max_slots);
 
         if !needs_dispatch {
             return;
@@ -380,8 +384,7 @@ impl Drop for SlotPermit {
             metrics::PROJECT_IN_FLIGHT
                 .with_label_values(&[&project_name])
                 .set(in_flight as f64);
-            metrics::SLOTS_IN_USE
-                .set(state.global_in_flight as f64);
+            metrics::SLOTS_IN_USE.set(state.global_in_flight as f64);
             // Slot is free — wake dispatch loop immediately
             notify.notify_one();
         });
@@ -395,7 +398,10 @@ mod tests {
     use std::collections::HashMap;
     use std::time::Duration;
 
-    fn make_config(slots: usize, projects: Vec<(&str, u32, u32, Option<usize>)>) -> Arc<ProxyConfig> {
+    fn make_config(
+        slots: usize,
+        projects: Vec<(&str, u32, u32, Option<usize>)>,
+    ) -> Arc<ProxyConfig> {
         let mut project_map = HashMap::new();
         for (name, priority, share, max_slots) in projects {
             project_map.insert(
@@ -411,8 +417,14 @@ mod tests {
         }
 
         Arc::new(ProxyConfig {
-            server: ServerConfig { host: "127.0.0.1".into(), port: 8080 },
-            upstream: UpstreamConfig { url: "http://localhost".into(), api_key: None },
+            server: ServerConfig {
+                host: "127.0.0.1".into(),
+                port: 8080,
+            },
+            upstream: UpstreamConfig {
+                url: "http://localhost".into(),
+                api_key: None,
+            },
             slots,
             default_timeout: Duration::from_secs(5),
             unauthenticated: UnauthenticatedPolicy::Reject(RejectLiteral::Reject),
@@ -473,12 +485,21 @@ mod tests {
         let rx3 = scheduler.enqueue("prod").await.unwrap();
 
         // Hold permits so slots aren't freed
-        let _p1 = tokio::time::timeout(Duration::from_millis(100), rx1).await.unwrap().unwrap();
-        let _p2 = tokio::time::timeout(Duration::from_millis(100), rx2).await.unwrap().unwrap();
+        let _p1 = tokio::time::timeout(Duration::from_millis(100), rx1)
+            .await
+            .unwrap()
+            .unwrap();
+        let _p2 = tokio::time::timeout(Duration::from_millis(100), rx2)
+            .await
+            .unwrap()
+            .unwrap();
 
         // Third should remain queued (max_slots=2)
         let result = tokio::time::timeout(Duration::from_millis(50), rx3).await;
-        assert!(result.is_err(), "third request should be queued due to max_slots");
+        assert!(
+            result.is_err(),
+            "third request should be queued due to max_slots"
+        );
     }
 
     #[tokio::test]
@@ -499,10 +520,7 @@ mod tests {
     async fn test_priority_tier_ordering() {
         // slots=1, two tiers — only one request dispatched at a time
         // priority-1 should always win over priority-2
-        let config = make_config(2, vec![
-            ("high", 1, 1, None),
-            ("low", 2, 1, None),
-        ]);
+        let config = make_config(2, vec![("high", 1, 1, None), ("low", 2, 1, None)]);
         let scheduler = Arc::new(ClassBasedScheduler::new(config));
 
         let scheduler_clone = Arc::clone(&scheduler);

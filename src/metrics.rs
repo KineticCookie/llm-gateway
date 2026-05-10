@@ -117,7 +117,9 @@ pub fn init_project_metrics(project_names: impl Iterator<Item = impl AsRef<str>>
         REQUESTS_TOTAL.with_label_values(&[n, "rejected"]).reset();
         REQUESTS_TOTAL.with_label_values(&[n, "evicted"]).reset();
         REQUESTS_TOTAL.with_label_values(&[n, "timeout"]).reset();
-        REQUESTS_TOTAL.with_label_values(&[n, "upstream_error"]).reset();
+        REQUESTS_TOTAL
+            .with_label_values(&[n, "upstream_error"])
+            .reset();
         UPSTREAM_STREAM_ERRORS.with_label_values(&[n]).reset();
     }
 }

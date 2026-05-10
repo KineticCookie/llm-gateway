@@ -7,14 +7,16 @@
 //! TEST_OPENAI_API_URL=http://localhost:8000 cargo test --test integration_test
 //! ```
 
-use llm_gateway::config::{ProjectConfig, ProxyConfig, ServerConfig, UnauthenticatedPolicy, RejectLiteral, UpstreamConfig};
+use llm_gateway::config::{
+    ProjectConfig, ProxyConfig, RejectLiteral, ServerConfig, UnauthenticatedPolicy, UpstreamConfig,
+};
+use reqwest::StatusCode;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio_stream::StreamExt;
-use reqwest::StatusCode;
 
 fn get_upstream_url() -> String {
     std::env::var("TEST_OPENAI_API_URL")
@@ -51,7 +53,10 @@ fn create_test_config() -> Arc<ProxyConfig> {
 }
 
 async fn start_gateway(config: Arc<ProxyConfig>) -> String {
-    use axum::{routing::{get, post}, Router};
+    use axum::{
+        routing::{get, post},
+        Router,
+    };
     use llm_gateway::handlers::{chat_completions, health_check, metrics_handler, AppState};
     use llm_gateway::queue::ClassBasedScheduler;
     use tower_http::trace::TraceLayer;
@@ -129,7 +134,13 @@ async fn test_streaming_request() {
 
     assert_eq!(resp.status(), StatusCode::OK);
     assert!(resp.headers().contains_key("x-request-id"));
-    assert!(resp.headers().get("content-type").unwrap().to_str().unwrap().contains("text/event-stream"));
+    assert!(resp
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .contains("text/event-stream"));
 
     let mut stream = resp.bytes_stream();
     let mut chunks: Vec<Value> = vec![];
@@ -137,7 +148,9 @@ async fn test_streaming_request() {
     while let Some(Ok(chunk)) = stream.next().await {
         for line in String::from_utf8_lossy(&chunk).lines() {
             if let Some(data) = line.strip_prefix("data: ") {
-                if data == "[DONE]" { break; }
+                if data == "[DONE]" {
+                    break;
+                }
                 if let Ok(v) = serde_json::from_str::<Value>(data) {
                     chunks.push(v);
                 }

@@ -20,9 +20,8 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let config = Arc::new(
-        ProxyConfig::from_file("config.yaml").or_else(|_| ProxyConfig::from_env())?,
-    );
+    let config =
+        Arc::new(ProxyConfig::from_file("config.yaml").or_else(|_| ProxyConfig::from_env())?);
 
     tracing::info!(
         host = %config.server.host,
