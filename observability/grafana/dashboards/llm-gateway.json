@@ -24,41 +24,27 @@
         "defaults": {
           "mappings": [],
           "thresholds": {
-            "mode": "absolute",
+            "mode": "percentage",
             "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "yellow",
-                "value": 50
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
             ]
           },
-          "unit": "none"
+          "unit": "percent",
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 6,
-        "w": 4,
-        "x": 0,
-        "y": 0
-      },
+      "gridPos": { "h": 6, "w": 4, "x": 0, "y": 0 },
       "id": 1,
       "options": {
         "minVizHeight": 75,
         "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -69,11 +55,11 @@
       "pluginVersion": "12.3.0",
       "targets": [
         {
-          "expr": "sum(llm_gateway_queue_size_by_class)",
+          "expr": "llm_gateway_slots_in_use / llm_gateway_slots_total * 100",
           "refId": "A"
         }
       ],
-      "title": "Queue Size",
+      "title": "Slot Utilization",
       "type": "gauge"
     },
     {
@@ -84,224 +70,45 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "green",
-                "value": 3
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 4,
-        "x": 4,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "minVizHeight": 75,
-        "minVizWidth": 75,
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "sizing": "auto"
-      },
-      "pluginVersion": "12.3.0",
-      "targets": [
-        {
-          "expr": "llm_gateway_available_permits",
-          "refId": "A"
-        }
-      ],
-      "title": "Available Slots",
-      "type": "gauge"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 8,
-        "y": 0
-      },
-      "id": 3,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean"
-          ],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.3.0",
-      "targets": [
-        {
-          "expr": "rate(llm_gateway_sync_requests_total{status=\"received\"}[1m])",
-          "legendFormat": "Sync",
-          "refId": "A"
-        },
-        {
-          "expr": "rate(llm_gateway_async_requests_total{status=\"received\"}[1m])",
-          "legendFormat": "Streaming",
-          "refId": "B"
-        }
-      ],
-      "title": "Request Rate (Sync vs Streaming)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
             ]
           },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 16,
-        "y": 0
-      },
-      "id": 20,
+      "gridPos": { "h": 6, "w": 4, "x": 4, "y": 0 },
+      "id": 2,
       "options": {
-        "displayMode": "gradient",
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "maxVizHeight": 300,
-        "minVizHeight": 16,
-        "minVizWidth": 8,
-        "namePlacement": "auto",
-        "orientation": "horizontal",
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
-        "showUnfilled": true,
-        "sizing": "auto",
-        "valueMode": "color"
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
       },
       "pluginVersion": "12.3.0",
       "targets": [
         {
-          "expr": "sum(rate(llm_gateway_sync_requests_total{status=\"received\"}[5m])) / (sum(rate(llm_gateway_sync_requests_total{status=\"received\"}[5m])) + sum(rate(llm_gateway_async_requests_total{status=\"received\"}[5m]))) * 100",
-          "legendFormat": "Sync %",
+          "expr": "sum(llm_gateway_project_queue_depth)",
           "refId": "A"
-        },
-        {
-          "expr": "sum(rate(llm_gateway_async_requests_total{status=\"received\"}[5m])) / (sum(rate(llm_gateway_sync_requests_total{status=\"received\"}[5m])) + sum(rate(llm_gateway_async_requests_total{status=\"received\"}[5m]))) * 100",
-          "legendFormat": "Streaming %",
-          "refId": "B"
         }
       ],
-      "title": "Sync vs Streaming Traffic Split",
-      "type": "bargauge"
+      "title": "Queued Requests",
+      "type": "gauge"
     },
     {
       "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
+          "color": { "mode": "palette-classic" },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -313,94 +120,54 @@
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
+            "scaleDistribution": { "type": "linear" },
             "showPoints": "never",
             "showValues": false,
             "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
+            "steps": [{ "color": "green", "value": 0 }]
           },
-          "unit": "s"
+          "unit": "reqps"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 6
-      },
-      "id": 21,
+      "gridPos": { "h": 6, "w": 16, "x": 8, "y": 0 },
+      "id": 3,
       "options": {
         "legend": {
-          "calcs": [
-            "mean",
-            "last"
-          ],
-          "displayMode": "table",
-          "placement": "right",
+          "calcs": ["mean"],
+          "displayMode": "list",
+          "placement": "bottom",
           "showLegend": true
         },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "none" }
       },
       "pluginVersion": "12.3.0",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, rate(llm_gateway_sync_upstream_duration_seconds_bucket[5m]))",
-          "legendFormat": "p50",
+          "expr": "sum by (project) (rate(llm_gateway_requests_total{outcome=\"success\"}[1m]))",
+          "legendFormat": "{{project}}",
           "refId": "A"
-        },
-        {
-          "expr": "histogram_quantile(0.95, rate(llm_gateway_sync_upstream_duration_seconds_bucket[5m]))",
-          "legendFormat": "p95",
-          "refId": "B"
-        },
-        {
-          "expr": "histogram_quantile(0.99, rate(llm_gateway_sync_upstream_duration_seconds_bucket[5m]))",
-          "legendFormat": "p99",
-          "refId": "C"
         }
       ],
-      "title": "SYNC: Upstream Latency (p50, p95, p99)",
+      "title": "Successful Request Rate by Project",
       "type": "timeseries"
     },
     {
       "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
+          "color": { "mode": "palette-classic" },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -412,81 +179,466 @@
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": false,
             "lineInterpolation": "linear",
-            "lineWidth": 1,
+            "lineWidth": 2,
             "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
+            "scaleDistribution": { "type": "linear" },
             "showPoints": "never",
             "showValues": false,
             "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "line" }
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 4 }
             ]
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Total Slots" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } },
+              { "id": "custom.lineStyle", "value": { "dash": [8, 4], "fill": "dash" } }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "last"],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "expr": "llm_gateway_slots_in_use",
+          "legendFormat": "In Use",
+          "refId": "A"
+        },
+        {
+          "expr": "llm_gateway_slots_total",
+          "legendFormat": "Total Slots",
+          "refId": "B"
+        }
+      ],
+      "title": "Slot Capacity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": 0 }]
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "last"],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "expr": "llm_gateway_project_in_flight",
+          "legendFormat": "{{project}}",
+          "refId": "A"
+        }
+      ],
+      "title": "In-Flight Requests by Project",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "normal" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": 0 }]
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": ["last"],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "expr": "llm_gateway_project_queue_depth",
+          "legendFormat": "{{project}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Queue Depth by Project (Stacked)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": 0 }]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "expr": "sum(rate(llm_gateway_requests_total{outcome=\"success\"}[1m]))",
+          "legendFormat": "Success",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(llm_gateway_requests_total{outcome=\"evicted\"}[1m]))",
+          "legendFormat": "Evicted",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(llm_gateway_requests_total{outcome=\"rejected\"}[1m]))",
+          "legendFormat": "Rejected",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(llm_gateway_requests_total{outcome=\"timeout\"}[1m]))",
+          "legendFormat": "Timeout",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(rate(llm_gateway_requests_total{outcome=\"upstream_error\"}[1m]))",
+          "legendFormat": "Upstream Error",
+          "refId": "E"
+        }
+      ],
+      "title": "Request Outcomes",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": 0 }]
           },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 6
-      },
-      "id": 22,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "id": 4,
       "options": {
         "legend": {
-          "calcs": [
-            "mean",
-            "last"
-          ],
+          "calcs": ["mean", "last"],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true
         },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "none" }
       },
       "pluginVersion": "12.3.0",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, rate(llm_gateway_async_ttft_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(llm_gateway_queue_wait_seconds_bucket[5m])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, rate(llm_gateway_async_ttft_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(llm_gateway_queue_wait_seconds_bucket[5m])))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, rate(llm_gateway_async_ttft_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(llm_gateway_queue_wait_seconds_bucket[5m])))",
           "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "title": "Queue Wait Time (All Projects)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": 0 }]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "last"],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(llm_gateway_upstream_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(llm_gateway_upstream_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(llm_gateway_upstream_duration_seconds_bucket[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "title": "Upstream Duration (sync: full body, streaming: [DONE])",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "green", "value": 0 }]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "last"],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, project) (rate(llm_gateway_ttft_seconds_bucket[5m])))",
+          "legendFormat": "{{project}} p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, project) (rate(llm_gateway_ttft_seconds_bucket[5m])))",
+          "legendFormat": "{{project}} p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, project) (rate(llm_gateway_ttft_seconds_bucket[5m])))",
+          "legendFormat": "{{project}} p99",
           "refId": "C"
         }
       ],
@@ -497,9 +649,7 @@
       "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
+          "color": { "mode": "palette-classic" },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -511,94 +661,64 @@
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
+            "scaleDistribution": { "type": "linear" },
             "showPoints": "never",
             "showValues": false,
             "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
+            "steps": [{ "color": "green", "value": 0 }]
           },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 14
-      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
       "id": 23,
       "options": {
         "legend": {
-          "calcs": [
-            "mean",
-            "last"
-          ],
+          "calcs": ["mean", "last"],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true
         },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "none" }
       },
       "pluginVersion": "12.3.0",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, rate(llm_gateway_async_stream_duration_seconds_bucket[5m]))",
-          "legendFormat": "p50",
+          "expr": "histogram_quantile(0.50, sum by (le, project) (rate(llm_gateway_stream_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{project}} p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, rate(llm_gateway_async_stream_duration_seconds_bucket[5m]))",
-          "legendFormat": "p95",
+          "expr": "histogram_quantile(0.95, sum by (le, project) (rate(llm_gateway_stream_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{project}} p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, rate(llm_gateway_async_stream_duration_seconds_bucket[5m]))",
-          "legendFormat": "p99",
+          "expr": "histogram_quantile(0.99, sum by (le, project) (rate(llm_gateway_stream_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{project}} p99",
           "refId": "C"
         }
       ],
-      "title": "STREAMING: Stream Duration (Time To Last Token)",
+      "title": "STREAMING: Stream Duration (First to Last Token)",
       "type": "timeseries"
     },
     {
       "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
+          "color": { "mode": "palette-classic" },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -610,281 +730,54 @@
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
+            "scaleDistribution": { "type": "linear" },
             "showPoints": "never",
             "showValues": false,
             "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          },
-          "unit": "tokens/sec"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 14
-      },
-      "id": 24,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "last"
-          ],
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.3.0",
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.50, rate(llm_gateway_async_tokens_per_second_bucket[5m]))",
-          "legendFormat": "p50",
-          "refId": "A"
-        },
-        {
-          "expr": "histogram_quantile(0.95, rate(llm_gateway_async_tokens_per_second_bucket[5m]))",
-          "legendFormat": "p95",
-          "refId": "B"
-        },
-        {
-          "expr": "histogram_quantile(0.99, rate(llm_gateway_async_tokens_per_second_bucket[5m]))",
-          "legendFormat": "p99",
-          "refId": "C"
-        }
-      ],
-      "title": "STREAMING: Tokens Per Second (TPS)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          },
-          "unit": "tokens/sec"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 22
-      },
-      "id": 25,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.3.0",
-      "targets": [
-        {
-          "expr": "rate(llm_gateway_async_tokens_generated_total[1m])",
-          "legendFormat": "{{class}}",
-          "refId": "A"
-        }
-      ],
-      "title": "STREAMING: Total Tokens Generated Rate",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
+            "steps": [{ "color": "green", "value": 0 }]
           },
           "unit": "reqps"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 22
-      },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 38 },
       "id": 26,
       "options": {
         "legend": {
-          "calcs": [
-            "mean"
-          ],
+          "calcs": ["sum"],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true
         },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "none" }
       },
       "pluginVersion": "12.3.0",
       "targets": [
         {
-          "expr": "rate(llm_gateway_async_stream_completion_total{status=\"complete\"}[1m])",
-          "legendFormat": "Complete",
+          "expr": "rate(llm_gateway_upstream_stream_errors_total[1m])",
+          "legendFormat": "{{project}}",
           "refId": "A"
-        },
-        {
-          "expr": "rate(llm_gateway_async_stream_completion_total{status=\"error\"}[1m])",
-          "legendFormat": "Error",
-          "refId": "B"
-        },
-        {
-          "expr": "rate(llm_gateway_client_disconnects_total[1m])",
-          "legendFormat": "Client Disconnect",
-          "refId": "C"
         }
       ],
-      "title": "STREAMING: Completion Status",
+      "title": "Upstream Stream Errors",
       "type": "timeseries"
     },
     {
       "datasource": "Prometheus",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
+          "color": { "mode": "palette-classic" },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -896,283 +789,48 @@
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
             "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
+            "scaleDistribution": { "type": "linear" },
             "showPoints": "never",
             "showValues": false,
             "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 30
-      },
-      "id": 4,
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean",
-            "last"
-          ],
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.3.0",
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(llm_gateway_queue_duration_seconds_bucket[5m])))",
-          "legendFormat": "p50",
-          "refId": "A"
-        },
-        {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(llm_gateway_queue_duration_seconds_bucket[5m])))",
-          "legendFormat": "p95",
-          "refId": "B"
-        },
-        {
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(llm_gateway_queue_duration_seconds_bucket[5m])))",
-          "legendFormat": "p99",
-          "refId": "C"
-        }
-      ],
-      "title": "Queue Wait Time (Percentiles - All Classes)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
+            "steps": [{ "color": "green", "value": 0 }]
           },
           "unit": "reqps"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 30
-      },
-      "id": 6,
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 38 },
+      "id": 27,
       "options": {
         "legend": {
-          "calcs": [
-            "sum"
-          ],
+          "calcs": ["sum"],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true
         },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "none" }
       },
       "pluginVersion": "12.3.0",
       "targets": [
         {
-          "expr": "rate(llm_gateway_requests_outcome_total{outcome=\"success\"}[1m])",
-          "legendFormat": "Success",
+          "expr": "rate(llm_gateway_unknown_credentials_total[1m])",
+          "legendFormat": "{{reason}}",
           "refId": "A"
-        },
-        {
-          "expr": "rate(llm_gateway_requests_outcome_total{outcome=\"evicted\"}[1m])",
-          "legendFormat": "Evicted",
-          "refId": "B"
-        },
-        {
-          "expr": "rate(llm_gateway_requests_outcome_total{outcome=\"rejected\"}[1m])",
-          "legendFormat": "Rejected",
-          "refId": "C"
         }
       ],
-      "title": "Request Outcomes",
+      "title": "Unknown API Key Requests",
       "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "fillOpacity": 80,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineWidth": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 38
-      },
-      "id": 27,
-      "options": {
-        "barRadius": 0,
-        "barWidth": 0.97,
-        "fullHighlight": false,
-        "groupWidth": 0.7,
-        "legend": {
-          "calcs": [
-            "last"
-          ],
-          "displayMode": "list",
-          "placement": "right",
-          "showLegend": true
-        },
-        "orientation": "auto",
-        "showValue": "auto",
-        "stacking": "normal",
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        },
-        "xTickLabelRotation": 0,
-        "xTickLabelSpacing": 0
-      },
-      "pluginVersion": "12.3.0",
-      "targets": [
-        {
-          "expr": "llm_gateway_queue_size_by_class{class=\"critical\"}",
-          "legendFormat": "Critical",
-          "refId": "A"
-        },
-        {
-          "expr": "llm_gateway_queue_size_by_class{class=\"high\"}",
-          "legendFormat": "High",
-          "refId": "B"
-        },
-        {
-          "expr": "llm_gateway_queue_size_by_class{class=\"normal\"}",
-          "legendFormat": "Normal",
-          "refId": "C"
-        },
-        {
-          "expr": "llm_gateway_queue_size_by_class{class=\"low\"}",
-          "legendFormat": "Low",
-          "refId": "D"
-        }
-      ],
-      "title": "Queue Size Over Time (Stacked by Class)",
-      "type": "barchart"
     },
     {
       "datasource": "Loki",
@@ -1180,12 +838,7 @@
         "defaults": {},
         "overrides": []
       },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 46
-      },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 44 },
       "id": 9,
       "options": {
         "dedupStrategy": "none",
@@ -1230,5 +883,5 @@
   "timezone": "",
   "title": "LLM Gateway Dashboard",
   "uid": "llm-gateway",
-  "version": 3
+  "version": 4
 }

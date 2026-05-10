@@ -4,3 +4,4 @@ Cargo.lock
 config.yaml
 logs/
 *.log
+models/

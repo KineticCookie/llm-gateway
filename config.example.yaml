@@ -1,89 +1,66 @@
-# Example configuration for LLM Gateway
-# Copy this file to config.yaml and customize as needed
-
 server:
-  # Host to bind the server to
-  # Use "0.0.0.0" to accept connections from any network interface
-  # Use "127.0.0.1" for localhost only
   host: "0.0.0.0"
-  
-  # Port to listen on
   port: 8080
 
 upstream:
-  # OpenAI API base URL (without /v1 suffix)
-  openai_api_url: "https://api.openai.com"
-  
-  # Optional: API key to use for upstream requests
-  # If not set, the proxy will forward the Authorization header from incoming requests
-  # You can also set this via environment variable: PROXY_UPSTREAM__API_KEY
+  # Base URL of your llama.cpp or OpenAI-compatible server (no /v1 suffix)
+  url: "http://localhost:8080"
+  # Optional: API key sent to upstream. If not set, the client's key is forwarded.
   api_key: null
 
-scheduler:
-  # Global maximum concurrent requests across all traffic classes
-  # This is the hard limit on total concurrency
-  global_concurrency: 10
-  
-  # Maximum total lifetime for a request (queue time + processing time) in seconds
-  # Requests exceeding this will receive a timeout error
-  timeout_seconds: 300
+# Number of llama.cpp inference slots (--parallel N in llama-server)
+slots: 8
 
-  # Traffic class configurations
-  # Define your own classes - use any names that make sense for your use case
-  # Examples: critical/high/normal/low, prod/staging/dev, team-a/team-b/team-c, etc.
-  classes:
-    # Example: Critical/production traffic
-    critical:
-      weight: 10               # Scheduling weight (higher = more throughput share)
-      priority: 100            # Eviction priority (higher = protected from eviction)
-                               # Optional - if not set, uses weight value
-      min_concurrency: 4       # Guaranteed minimum concurrent slots
-      max_concurrency: 10      # Maximum concurrent slots for this class
-      max_queue_size: 200      # Maximum queue depth before rejecting requests
+# Default request timeout (queue wait + inference). Supports: 30s, 5m, 1h
+default_timeout: 5m
 
-    # Example: High priority work
-    high:
-      weight: 5
-      priority: 75             # Explicit priority (can differ from weight)
-      min_concurrency: 2
-      max_concurrency: 8
-      max_queue_size: 150
+# What to do with requests that have no matching API key.
+# "reject" returns 403. Or set to a project name to route them there.
+unauthenticated: reject
 
-    # Example: Normal/regular traffic
-    normal:
-      weight: 2
-      priority: 50
-      min_concurrency: 1
-      max_concurrency: 6
-      max_queue_size: 150
+projects:
+  # Tier 1 — highest importance, always served first
+  production:
+    priority: 1
+    share: 1        # only project at this tier, share is irrelevant
+    max_slots: 8    # can use all slots if needed (defaults to global slots)
+    timeout: 30s    # tight timeout for live traffic
+    api_keys:
+      - "sk-prod-xxx"
 
-    # Example: Low priority/background work
-    low:
-      weight: 1
-      priority: 25
-      min_concurrency: 1
-      max_concurrency: 4
-      max_queue_size: 100
+  # Tier 2 — only gets slots when tier 1 queue is empty
+  staging:
+    priority: 2
+    share: 1
+    max_slots: 4
+    timeout: 2m
+    api_keys:
+      - "sk-staging-xxx"
 
-# Credential to traffic class mappings
-credentials:
-  # Map API keys to traffic classes
-  # The proxy extracts the Bearer token from Authorization header
-  # and looks it up here to determine the traffic class
-  api_keys:
-    # Replace these with your actual API keys
-    # Map each API key to one of your configured class names above
-    "sk-proj-critical-xxx": "critical"
-    "sk-proj-high-xxx": "high"
-    "sk-proj-normal-xxx": "normal"
-    "sk-proj-low-xxx": "low"
-  
-  # Optional: default class for unknown API keys
-  # If set, unknown API keys will be assigned to this class
-  # If not set (null), unknown credentials receive HTTP 403 Forbidden
-  default_class: null  # e.g., "low" to allow unknown keys at lowest priority
-  
-  # Optional: fallback class for misconfigured class mappings
-  # If an API key maps to a non-existent class name, use this instead
-  # If not set (null), misconfigured mappings are treated as unknown credentials
-  fallback_class: null  # e.g., "low" to catch configuration errors
+  # Tier 3 — background/batch work, runs when nothing else is waiting
+  testing:
+    priority: 3
+    share: 1
+    max_slots: 2
+    timeout: 10m
+    api_keys:
+      - "sk-test-xxx"
+
+# Example: two projects sharing the same priority tier
+# They compete for slots weighted by share (2:1 ratio = ~67% / ~33%)
+#
+#  team-alpha:
+#    priority: 2
+#    share: 2
+#    max_slots: 6
+#    timeout: 2m
+#    api_keys:
+#      - "sk-alpha-xxx"
+#
+#  team-beta:
+#    priority: 2
+#    share: 1
+#    max_slots: 4
+#    timeout: 2m
+#    api_keys:
+#      - "sk-beta-xxx"

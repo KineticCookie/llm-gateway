@@ -5,186 +5,123 @@ use prometheus::{
 };
 
 lazy_static! {
-    // ===========================================
-    // SYNC (Non-streaming) Request Metrics
-    // ===========================================
+    // ------------------------------------------------------------------
+    // Capacity — current state of the slot pool
+    // ------------------------------------------------------------------
 
-    // Counter for total sync requests received
-    pub static ref SYNC_REQUESTS_TOTAL: CounterVec = register_counter_vec!(
-        "llm_gateway_sync_requests_total",
-        "Total number of non-streaming requests received",
-        &["class", "status"]
-    )
-    .unwrap();
+    /// Static total from config — useful as denominator for utilization.
+    pub static ref SLOTS_TOTAL: Gauge = register_gauge!(
+        "llm_gateway_slots_total",
+        "Total number of inference slots configured (llama.cpp --parallel)"
+    ).unwrap();
 
-    // Histogram for sync OpenAI API call duration by class
-    pub static ref SYNC_OPENAI_DURATION: HistogramVec = register_histogram_vec!(
-        "llm_gateway_sync_upstream_duration_seconds",
-        "Time spent calling OpenAI API for sync requests by traffic class",
-        &["class", "status"],
-        vec![0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0]
-    )
-    .unwrap();
+    /// How many slots are currently occupied (global).
+    pub static ref SLOTS_IN_USE: Gauge = register_gauge!(
+        "llm_gateway_slots_in_use",
+        "Number of inference slots currently in use"
+    ).unwrap();
 
-    // Counter for sync upstream OpenAI responses by class and HTTP status code
-    pub static ref SYNC_OPENAI_RESPONSES: CounterVec = register_counter_vec!(
-        "llm_gateway_sync_upstream_responses_total",
-        "Total number of sync responses received from OpenAI by traffic class and HTTP status code",
-        &["class", "status_code"]
-    )
-    .unwrap();
+    /// Per-project in-flight count.
+    pub static ref PROJECT_IN_FLIGHT: GaugeVec = register_gauge_vec!(
+        "llm_gateway_project_in_flight",
+        "Number of requests currently occupying a slot per project",
+        &["project"]
+    ).unwrap();
 
-    // Histogram for total sync request duration by class
-    pub static ref SYNC_REQUEST_DURATION: HistogramVec = register_histogram_vec!(
-        "llm_gateway_sync_request_duration_seconds",
-        "Total sync request duration including queue and upstream time",
-        &["class", "status"],
-        vec![0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0]
-    )
-    .unwrap();
+    /// Per-project queue depth.
+    pub static ref PROJECT_QUEUE_DEPTH: GaugeVec = register_gauge_vec!(
+        "llm_gateway_project_queue_depth",
+        "Number of requests waiting in queue per project",
+        &["project"]
+    ).unwrap();
 
-    // ===========================================
-    // ASYNC (Streaming) Request Metrics
-    // ===========================================
+    // ------------------------------------------------------------------
+    // Throughput — what happened to each request
+    // outcome: success | rejected | evicted | timeout | upstream_error
+    // ------------------------------------------------------------------
 
-    // Counter for total async requests received
-    pub static ref ASYNC_REQUESTS_TOTAL: CounterVec = register_counter_vec!(
-        "llm_gateway_async_requests_total",
-        "Total number of streaming requests received",
-        &["class", "status"]
-    )
-    .unwrap();
+    pub static ref REQUESTS_TOTAL: CounterVec = register_counter_vec!(
+        "llm_gateway_requests_total",
+        "Total requests by project and outcome",
+        &["project", "outcome"]
+    ).unwrap();
 
-    // Histogram for Time To First Token (TTFT)
-    pub static ref ASYNC_TTFT: HistogramVec = register_histogram_vec!(
-        "llm_gateway_async_ttft_seconds",
-        "Time to first token for streaming requests (includes queue + upstream TTFT)",
-        &["class"],
+    // ------------------------------------------------------------------
+    // Latency
+    // ------------------------------------------------------------------
+
+    /// Time a request spent waiting in queue before a slot was granted.
+    /// Recorded on dispatch and eviction. Timeout items are recorded when
+    /// the dispatch loop finds the closed receiver and discards the item.
+    pub static ref QUEUE_WAIT: HistogramVec = register_histogram_vec!(
+        "llm_gateway_queue_wait_seconds",
+        "Time spent waiting in queue before a slot was granted or the request was evicted",
+        &["project"],
+        vec![0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0]
+    ).unwrap();
+
+    /// Time from slot acquired to response fully received from upstream.
+    /// For sync: time to full response body.
+    /// For streaming: time from first byte to [DONE].
+    pub static ref UPSTREAM_DURATION: HistogramVec = register_histogram_vec!(
+        "llm_gateway_upstream_duration_seconds",
+        "Time from slot acquired to upstream response complete (sync: full body, streaming: [DONE])",
+        &["project"],
+        vec![0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0]
+    ).unwrap();
+
+    /// Streaming only: time from request received to first token (includes queue wait).
+    pub static ref TTFT: HistogramVec = register_histogram_vec!(
+        "llm_gateway_ttft_seconds",
+        "Time to first token for streaming requests (queue wait + upstream TTFT)",
+        &["project"],
         vec![0.1, 0.25, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0, 15.0, 30.0]
-    )
-    .unwrap();
+    ).unwrap();
 
-    // Histogram for Time To Last Token (stream duration)
-    pub static ref ASYNC_STREAM_DURATION: HistogramVec = register_histogram_vec!(
-        "llm_gateway_async_stream_duration_seconds",
-        "Total streaming duration from first to last token",
-        &["class"],
+    /// Streaming only: duration from first token to last token.
+    pub static ref STREAM_DURATION: HistogramVec = register_histogram_vec!(
+        "llm_gateway_stream_duration_seconds",
+        "Streaming duration from first token to last token",
+        &["project"],
         vec![1.0, 5.0, 10.0, 20.0, 30.0, 45.0, 60.0, 90.0, 120.0, 180.0]
-    )
-    .unwrap();
+    ).unwrap();
 
-    // Histogram for Tokens Per Second
-    pub static ref ASYNC_TOKENS_PER_SECOND: HistogramVec = register_histogram_vec!(
-        "llm_gateway_async_tokens_per_second",
-        "Tokens generated per second for streaming requests",
-        &["class"],
-        vec![1.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 75.0, 100.0]
-    )
-    .unwrap();
+    // ------------------------------------------------------------------
+    // Errors
+    // ------------------------------------------------------------------
 
-    // Counter for total tokens generated in streaming
-    pub static ref ASYNC_TOKENS_GENERATED: CounterVec = register_counter_vec!(
-        "llm_gateway_async_tokens_generated_total",
-        "Total number of tokens generated in streaming responses",
-        &["class"]
-    )
-    .unwrap();
-
-    // Counter for streaming completion status
-    pub static ref ASYNC_STREAM_COMPLETION: CounterVec = register_counter_vec!(
-        "llm_gateway_async_stream_completion_total",
-        "Streaming request completion status (complete, client_disconnect, error)",
-        &["class", "status"]
-    )
-    .unwrap();
-
-    // Histogram for total async request duration (queue + full stream)
-    pub static ref ASYNC_REQUEST_DURATION: HistogramVec = register_histogram_vec!(
-        "llm_gateway_async_request_duration_seconds",
-        "Total async request duration including queue and full streaming time",
-        &["class"],
-        vec![1.0, 5.0, 10.0, 20.0, 30.0, 45.0, 60.0, 90.0, 120.0, 180.0]
-    )
-    .unwrap();
-
-    // ===========================================
-    // Common Metrics (both sync and async)
-    // ===========================================
-
-    // Counter for requests by outcome
-    pub static ref REQUESTS_OUTCOME: CounterVec = register_counter_vec!(
-        "llm_gateway_requests_outcome_total",
-        "Total number of requests by outcome (success, rejected, evicted, timeout)",
-        &["outcome"]
-    )
-    .unwrap();
-
-    // Gauge for queue size by traffic class
-    pub static ref QUEUE_SIZE_BY_CLASS: GaugeVec = register_gauge_vec!(
-        "llm_gateway_queue_size_by_class",
-        "Current number of requests in queue by traffic class",
-        &["class"]
-    )
-    .unwrap();
-
-    // Gauge for in-flight requests by traffic class
-    pub static ref IN_FLIGHT_REQUESTS: GaugeVec = register_gauge_vec!(
-        "llm_gateway_in_flight_requests",
-        "Current number of in-flight requests by traffic class",
-        &["class"]
-    )
-    .unwrap();
-
-    // Gauge for available global processing slots
-    pub static ref AVAILABLE_PERMITS: Gauge = register_gauge!(
-        "llm_gateway_available_permits",
-        "Number of available concurrent processing slots (global)"
-    )
-    .unwrap();
-
-    // Histogram for queue wait time by class
-    pub static ref QUEUE_DURATION: HistogramVec = register_histogram_vec!(
-        "llm_gateway_queue_duration_seconds",
-        "Time spent waiting in queue by traffic class",
-        &["class"],
-        vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
-    )
-    .unwrap();
-
-    // Counter for evicted requests by class
-    pub static ref REQUESTS_EVICTED: CounterVec = register_counter_vec!(
-        "llm_gateway_requests_evicted_total",
-        "Total number of requests evicted from queue by traffic class",
-        &["class"]
-    )
-    .unwrap();
-
-    // Counter for rejected requests by class and reason
-    pub static ref REQUESTS_REJECTED: CounterVec = register_counter_vec!(
-        "llm_gateway_requests_rejected_total",
-        "Total number of requests rejected by traffic class and reason",
-        &["class", "reason"]
-    )
-    .unwrap();
-
-    // Counter for unknown/unmapped credentials (aggregate only)
+    /// Requests with no matching API key (no_key | unknown_key).
     pub static ref UNKNOWN_CREDENTIALS: CounterVec = register_counter_vec!(
         "llm_gateway_unknown_credentials_total",
-        "Total number of requests with unknown or unmapped credentials",
-        &["action"]
-    )
-    .unwrap();
+        "Requests with missing or unknown API key",
+        &["reason"]
+    ).unwrap();
 
-    // Counter for client disconnects
-    pub static ref CLIENT_DISCONNECTS: CounterVec = register_counter_vec!(
-        "llm_gateway_client_disconnects_total",
-        "Total number of client disconnects by traffic class",
-        &["class"]
-    )
-    .unwrap();
+    /// Errors reading from the upstream stream mid-response.
+    pub static ref UPSTREAM_STREAM_ERRORS: CounterVec = register_counter_vec!(
+        "llm_gateway_upstream_stream_errors_total",
+        "Errors reading from upstream during streaming",
+        &["project"]
+    ).unwrap();
 }
 
-/// Encode and return metrics in Prometheus text format
+/// Pre-initialize all per-project label combinations so they appear in
+/// /metrics from startup, even before any requests arrive.
+pub fn init_project_metrics(project_names: impl Iterator<Item = impl AsRef<str>>) {
+    for name in project_names {
+        let n = name.as_ref();
+        PROJECT_IN_FLIGHT.with_label_values(&[n]).set(0.0);
+        PROJECT_QUEUE_DEPTH.with_label_values(&[n]).set(0.0);
+        // Touch counters and histograms so they show up with zero values
+        REQUESTS_TOTAL.with_label_values(&[n, "success"]).reset();
+        REQUESTS_TOTAL.with_label_values(&[n, "rejected"]).reset();
+        REQUESTS_TOTAL.with_label_values(&[n, "evicted"]).reset();
+        REQUESTS_TOTAL.with_label_values(&[n, "timeout"]).reset();
+        REQUESTS_TOTAL.with_label_values(&[n, "upstream_error"]).reset();
+        UPSTREAM_STREAM_ERRORS.with_label_values(&[n]).reset();
+    }
+}
+
 pub fn encode_metrics() -> Result<String, prometheus::Error> {
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
