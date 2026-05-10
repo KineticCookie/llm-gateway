@@ -1,7 +1,4 @@
-mod config;
-mod handlers;
-mod metrics;
-mod queue;
+// Modules are defined in lib.rs
 
 use axum::{
     routing::{get, post},
@@ -11,9 +8,9 @@ use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::config::ProxyConfig;
-use crate::handlers::{chat_completions, health_check, metrics_handler, AppState};
-use crate::queue::ClassBasedScheduler;
+use llm_gateway::config::ProxyConfig;
+use llm_gateway::handlers::{chat_completions, health_check, metrics_handler, AppState};
+use llm_gateway::queue::ClassBasedScheduler;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -74,7 +71,7 @@ async fn main() -> anyhow::Result<()> {
     // Build router
     let app = Router::new()
         .route("/health", get(health_check))
-        .route("/status", get(handlers::status))
+        .route("/status", get(llm_gateway::handlers::status))
         .route("/metrics", get(metrics_handler))
         .route("/v1/chat/completions", post(chat_completions))
         // Add other OpenAI endpoints as pass-through if needed

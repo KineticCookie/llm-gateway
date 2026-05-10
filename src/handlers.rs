@@ -12,6 +12,8 @@ use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio_stream::{Stream, StreamExt};
+use futures::StreamExt as FuturesStreamExt;
+use std::sync::Mutex;
 use uuid::Uuid;
 
 use crate::config::ProxyConfig;
@@ -471,45 +473,62 @@ fn create_streaming_response(
     request_start: Instant,
     _queue_duration: std::time::Duration,
 ) -> impl Stream<Item = Result<axum::response::sse::Event, Infallible>> {
-    let mut first_token_received = false;
-    let mut token_count = 0u64;
-    let mut stream_start = None;
+    // Use shared state for metrics tracking across multiple events
+    let first_token_received = Arc::new(Mutex::new(false));
+    let token_count = Arc::new(Mutex::new(0u64));
+    let stream_start = Arc::new(Mutex::new(None::<Instant>));
     let class_str = Arc::new(class_str);
+    let request_id = Arc::new(request_id);
 
     stream
-        .map(move |chunk_result| {
+        .flat_map(move |chunk_result| {
             let class_str = Arc::clone(&class_str);
-            match chunk_result {
+            let request_id = Arc::clone(&request_id);
+            let first_token_received = Arc::clone(&first_token_received);
+            let token_count = Arc::clone(&token_count);
+            let stream_start = Arc::clone(&stream_start);
+            
+            let events: Vec<Result<axum::response::sse::Event, Infallible>> = match chunk_result {
                 Ok(chunk) => {
-                    // Record first token timing
-                    if !first_token_received {
-                        first_token_received = true;
-                        let ttft = request_start.elapsed();
-                        stream_start = Some(Instant::now());
-                        metrics::ASYNC_TTFT
-                            .with_label_values(&[&class_str])
-                            .observe(ttft.as_secs_f64());
-                        tracing::debug!(
-                            "First token received: request_id={}, ttft_ms={}",
-                            request_id,
-                            ttft.as_millis()
-                        );
-                    }
-
-                    // Parse SSE chunks to count tokens and extract data payloads
+                    // Parse SSE chunks to extract data payloads
                     let chunk_str = String::from_utf8_lossy(&chunk);
-                    let mut data_lines = Vec::new();
+                    let mut events = Vec::new();
                     
                     for line in chunk_str.lines() {
                         if line.starts_with("data: ") {
                             let data = &line[6..];
-                            data_lines.push(data);
+                            
+                            // Record first token timing
+                            {
+                                let mut first_received = first_token_received.lock().unwrap();
+                                if !*first_received {
+                                    *first_received = true;
+                                    let ttft = request_start.elapsed();
+                                    let mut start = stream_start.lock().unwrap();
+                                    *start = Some(Instant::now());
+                                    drop(start);
+                                    
+                                    metrics::ASYNC_TTFT
+                                        .with_label_values(&[&class_str])
+                                        .observe(ttft.as_secs_f64());
+                                    tracing::debug!(
+                                        "First token received: request_id={}, ttft_ms={}",
+                                        request_id,
+                                        ttft.as_millis()
+                                    );
+                                }
+                            }
                             
                             if data == "[DONE]" {
                                 // Stream completed successfully
-                                if let Some(start) = stream_start {
-                                    let stream_duration = start.elapsed();
+                                let start_guard = stream_start.lock().unwrap();
+                                if let Some(start_time) = *start_guard {
+                                    drop(start_guard);
+                                    
+                                    let stream_duration = start_time.elapsed();
                                     let total_duration = request_start.elapsed();
+                                    
+                                    let count = *token_count.lock().unwrap();
                                     
                                     metrics::ASYNC_STREAM_DURATION
                                         .with_label_values(&[&class_str])
@@ -519,8 +538,8 @@ fn create_streaming_response(
                                         .with_label_values(&[&class_str])
                                         .observe(total_duration.as_secs_f64());
                                     
-                                    if token_count > 0 && stream_duration.as_secs_f64() > 0.0 {
-                                        let tps = token_count as f64 / stream_duration.as_secs_f64();
+                                    if count > 0 && stream_duration.as_secs_f64() > 0.0 {
+                                        let tps = count as f64 / stream_duration.as_secs_f64();
                                         metrics::ASYNC_TOKENS_PER_SECOND
                                             .with_label_values(&[&class_str])
                                             .observe(tps);
@@ -528,7 +547,7 @@ fn create_streaming_response(
                                     
                                     metrics::ASYNC_TOKENS_GENERATED
                                         .with_label_values(&[&class_str])
-                                        .inc_by(token_count as f64);
+                                        .inc_by(count as f64);
                                     
                                     metrics::ASYNC_STREAM_COMPLETION
                                         .with_label_values(&[&class_str, "complete"])
@@ -541,9 +560,9 @@ fn create_streaming_response(
                                     tracing::info!(
                                         "Stream completed: request_id={}, tokens={}, duration_ms={}, tps={:.2}",
                                         request_id,
-                                        token_count,
+                                        count,
                                         stream_duration.as_millis(),
-                                        token_count as f64 / stream_duration.as_secs_f64()
+                                        count as f64 / stream_duration.as_secs_f64()
                                     );
                                 }
                             } else if let Ok(json) = serde_json::from_str::<Value>(data) {
@@ -554,21 +573,23 @@ fn create_streaming_response(
                                             .and_then(|d| d.get("content"))
                                             .and_then(|c| c.as_str())
                                             .is_some() {
-                                            token_count += 1;
+                                            *token_count.lock().unwrap() += 1;
                                         }
                                     }
                                 }
                             }
+                            
+                            // Emit each data line as a separate SSE event
+                            // Event::data() will add "data: " prefix and proper newlines
+                            events.push(Ok(axum::response::sse::Event::default().data(data)));
                         }
                     }
 
-                    // Return the data payload (without "data: " prefix since Event::data() adds it)
-                    // Join multiple data lines with newlines if needed
-                    if data_lines.is_empty() {
-                        // Empty chunk, send keep-alive
-                        Ok(axum::response::sse::Event::default().comment(""))
+                    // If no events found, send keep-alive comment
+                    if events.is_empty() {
+                        vec![Ok(axum::response::sse::Event::default().comment(""))]
                     } else {
-                        Ok(axum::response::sse::Event::default().data(data_lines.join("\n")))
+                        events
                     }
                 }
                 Err(e) => {
@@ -576,9 +597,11 @@ fn create_streaming_response(
                     metrics::ASYNC_STREAM_COMPLETION
                         .with_label_values(&[&class_str, "error"])
                         .inc();
-                    Ok(axum::response::sse::Event::default().data("error"))
+                    vec![Ok(axum::response::sse::Event::default().data("error"))]
                 }
-            }
+            };
+            
+            futures::stream::iter(events)
         })
 }
 

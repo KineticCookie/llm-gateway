@@ -9,20 +9,47 @@ clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-  # Scrape logs from the gateway logs directory
-  - job_name: llm-gateway-logs
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: llm-gateway
-          __path__: /logs/*.log
+  # Scrape Docker container logs
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/llm-gateway'
+        action: keep
+      - source_labels: ['__meta_docker_container_name']
+        target_label: container
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: stream
     pipeline_stages:
+      # Match Rust tracing format
       - regex:
-          expression: '^(?P<timestamp>\S+)\s+(?P<level>\S+)\s+(?P<target>\S+):\s+(?P<message>.*)$'
+          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s+(?P<level>\w+)\s+(?P<target>[^:]+):\s+(?P<message>.*)$'
       - labels:
           level:
           target:
       - timestamp:
           source: timestamp
-          format: RFC3339
+          format: RFC3339Nano
+      - output:
+          source: message
+
+  # Scrape logs from the gateway logs directory (fallback)
+  - job_name: llm-gateway-files
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: llm-gateway
+          source: file
+          __path__: /logs/*.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s+(?P<level>\w+)\s+(?P<target>[^:]+):\s+(?P<message>.*)$'
+      - labels:
+          level:
+          target:
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
