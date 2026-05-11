@@ -55,7 +55,7 @@
       "pluginVersion": "12.3.0",
       "targets": [
         {
-          "expr": "llm_gateway_slots_in_use / llm_gateway_slots_total * 100",
+          "expr": "avg_over_time(llm_gateway_slots_in_use[1m]) / llm_gateway_slots_total * 100",
           "refId": "A"
         }
       ],

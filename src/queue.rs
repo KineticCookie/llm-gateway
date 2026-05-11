@@ -271,12 +271,26 @@ impl ClassBasedScheduler {
                         notify: Arc::clone(&self.notify),
                     };
 
-                    // If receiver dropped, immediately release the slot back
-                    if item.tx.send(Ok(permit)).is_err() {
-                        let queue = state.projects.get_mut(&project_name).unwrap();
-                        queue.in_flight -= 1;
-                        let _ = queue;
+                    // If receiver dropped (request timed out while waiting for a slot),
+                    // release the slot synchronously. We must use mem::forget to prevent
+                    // SlotPermit::drop from spawning an async task that would decrement
+                    // in_flight a second time, corrupting the counter and SLOTS_IN_USE metric.
+                    if let Err(Ok(permit)) = item.tx.send(Ok(permit)) {
+                        std::mem::forget(permit);
+                        let in_flight = {
+                            let queue = state.projects.get_mut(&project_name).unwrap();
+                            queue.in_flight -= 1;
+                            queue.in_flight
+                        };
                         state.global_in_flight -= 1;
+                        metrics::PROJECT_IN_FLIGHT
+                            .with_label_values(&[&project_name])
+                            .set(in_flight as f64);
+                        metrics::SLOTS_IN_USE.set(state.global_in_flight as f64);
+                        tracing::debug!(
+                            "Discarded timed-out request (receiver dropped): project={}",
+                            project_name
+                        );
                     }
                 }
             }

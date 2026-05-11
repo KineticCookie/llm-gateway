@@ -51,8 +51,8 @@ lazy_static! {
     // ------------------------------------------------------------------
 
     /// Time a request spent waiting in queue before a slot was granted.
-    /// Recorded on dispatch and eviction. Timeout items are recorded when
-    /// the dispatch loop finds the closed receiver and discards the item.
+    /// Recorded on dispatch (including timed-out items found during dispatch)
+    /// and on eviction.
     pub static ref QUEUE_WAIT: HistogramVec = register_histogram_vec!(
         "llm_gateway_queue_wait_seconds",
         "Time spent waiting in queue before a slot was granted or the request was evicted",

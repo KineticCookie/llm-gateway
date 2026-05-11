@@ -1,19 +1,15 @@
 global:
   scrape_interval: 5s
   evaluation_interval: 5s
-  external_labels:
-    cluster: 'llm-gateway'
-    environment: 'development'
 
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
 
-  # Scrape the LLM Gateway running as a Docker service
   - job_name: 'llm-gateway'
     static_configs:
       - targets: ['proxy:12345']
     metrics_path: '/metrics'
-    scrape_interval: 5s
-    scrape_timeout: 3s
+    scrape_interval: 1s
+    scrape_timeout: 1s

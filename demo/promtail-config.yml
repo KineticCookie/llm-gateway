@@ -9,7 +9,6 @@ clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-  # Scrape Docker container logs
   - job_name: docker
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
@@ -22,8 +21,9 @@ scrape_configs:
         target_label: container
       - source_labels: ['__meta_docker_container_log_stream']
         target_label: stream
+      - target_label: job
+        replacement: llm-gateway
     pipeline_stages:
-      # Match Rust tracing format
       - regex:
           expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s+(?P<level>\w+)\s+(?P<target>[^:]+):\s+(?P<message>.*)$'
       - labels:
@@ -34,22 +34,3 @@ scrape_configs:
           format: RFC3339Nano
       - output:
           source: message
-
-  # Scrape logs from the gateway logs directory (fallback)
-  - job_name: llm-gateway-files
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: llm-gateway
-          source: file
-          __path__: /logs/*.log
-    pipeline_stages:
-      - regex:
-          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s+(?P<level>\w+)\s+(?P<target>[^:]+):\s+(?P<message>.*)$'
-      - labels:
-          level:
-          target:
-      - timestamp:
-          source: timestamp
-          format: RFC3339Nano

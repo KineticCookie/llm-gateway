@@ -1,0 +1,46 @@
+server:
+  host: "0.0.0.0"
+  port: 12345
+
+upstream:
+  url: "http://llama:8080"
+  api_key: null
+
+# Must match --parallel in the llama service
+slots: 4
+
+default_timeout: 5m
+
+unauthenticated: reject
+
+projects:
+  critical:
+    priority: 1
+    share: 1
+    max_slots: 4
+    timeout: 30s
+    api_keys:
+      - "demo-key-critical"
+
+  high:
+    priority: 2
+    share: 2
+    max_slots: 3
+    timeout: 2m
+    api_keys:
+      - "demo-key-high"
+
+  normal:
+    priority: 2
+    share: 1
+    max_slots: 3
+    timeout: 5m
+    api_keys:
+      - "demo-key-normal"
+
+  low:
+    priority: 3
+    max_slots: 2
+    timeout: 10m
+    api_keys:
+      - "demo-key-low"

@@ -1,0 +1,113 @@
+services:
+  llama:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    environment:
+      - HF_HOME=/hf-cache
+    volumes:
+      - llama-model:/hf-cache
+    command: >
+      --hf-repo unsloth/gemma-3-1b-it-GGUF
+      --host 0.0.0.0
+      --port 8080
+      --ctx-size 4096
+      --parallel 4
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 180s
+    networks:
+      - demo
+
+  proxy:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: llm-gateway
+    ports:
+      - "12345:12345"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      - RUST_LOG=info
+    depends_on:
+      llama:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - demo
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:12345/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - demo
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+      - loki
+    restart: unless-stopped
+    networks:
+      - demo
+
+  loki:
+    image: grafana/loki:latest
+    volumes:
+      - ./loki-config.yml:/etc/loki/local-config.yaml
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+    networks:
+      - demo
+
+  promtail:
+    image: grafana/promtail:latest
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/config.yml
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    restart: unless-stopped
+    networks:
+      - demo
+
+networks:
+  demo:
+    driver: bridge
+
+volumes:
+  llama-model:
+  prometheus-data:
+  grafana-data:
+  loki-data:
